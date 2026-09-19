@@ -13,9 +13,20 @@ jobs:
           java-version: '17'
           distribution: 'zulu'
 
-      # 빌드에 필요한 누락된 .env.example 빈 파일 강제 생성
+      # 1. 빌드에 필요한 누락된 .env.example 빈 파일 생성
       - name: Create missing env file
         run: touch .env.example
+
+      # 2. 파이어베이스 플러그인 에러 방지용 가짜 google-services.json 생성
+      - name: Create fake google-services.json
+        run: |
+          mkdir -p app/
+          echo '{"project_info":{"project_number":"123","project_id":"fake"},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:123","android_client_info":{"package_name":"com.example.applock"}},"api_key":[{}]}]}' > app/google-services.json
+
+      # 3. ':app:validateSigningDebug' 에러 해결용 임시 디버그 인증서(keystore) 강제 생성
+      - name: Generate missing debug keystore
+        run: |
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
