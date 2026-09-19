@@ -13,7 +13,10 @@ jobs:
           java-version: '17'
           distribution: 'zulu'
 
-      # 시스템에 내장된 gradle을 사용하여 gradlew 파일이 없어도 빌드하도록 우회
+      # 빌드에 필요한 누락된 .env.example 빈 파일 강제 생성
+      - name: Create missing env file
+        run: touch .env.example
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
