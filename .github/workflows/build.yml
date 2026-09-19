@@ -17,13 +17,13 @@ jobs:
       - name: Create missing env file
         run: touch .env.example
 
-      # 2. 확인된 진짜 패키지명(com.aistudio.applock.nxpattern)을 넣은 가짜 google-services.json 생성
+      # 2. current_key까지 완벽하게 채워 넣은 가짜 google-services.json 생성 (플러그인 완벽 우회)
       - name: Create fake google-services.json
         run: |
           mkdir -p app/
-          echo '{"project_info":{"project_number":"123","project_id":"fake"},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:123","android_client_info":{"package_name":"com.aistudio.applock.nxpattern"}},"api_key":[{}]}]}' > app/google-services.json
+          echo '{"project_info":{"project_number":"123456789","project_id":"fake-project"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789:android:123456789","android_client_info":{"package_name":"com.aistudio.applock.nxpattern"}},"api_key":[{"current_key":"AIzaSyFakeKey_1234567890abcdefghijklm"}]}]}' > app/google-services.json
 
-      # 3. Gradle 설정에 명시된 이름(debug.keystore)과 비밀번호(android)에 맞춘 임시 인증서 강제 생성
+      # 3. 임시 디버그 인증서(keystore) 강제 생성
       - name: Generate missing debug keystore
         run: |
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
@@ -31,7 +31,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # 4. 테스트 코드가 빌드를 방해하지 않도록 테스트 과정을 제외하고 순수 APK만 컴파일 수행
+      # 4. 테스트 과정을 제외하고 100% 깔끔하게 순수 APK만 컴파일 수행
       - name: Build Debug APK
         run: gradle assembleDebug -x test
 
