@@ -1,0 +1,8 @@
+{
+  "name": "App Lock & Vault",
+  "description": "Customizable N x N grid pattern app lock with biometric support, themes, and locked app manager.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
+ 

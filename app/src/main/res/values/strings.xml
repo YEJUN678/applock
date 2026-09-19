@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">App Lock &amp; Vault</string>
+    <string name="accessibility_service_label">App Lock &amp; Vault 실시간 보안</string>
+    <string name="accessibility_service_description">잠긴 앱 실행 시 보안 잠금 화면을 즉시 표시하여 개인정보를 안전하게 보호합니다.</string>
+</resources>
