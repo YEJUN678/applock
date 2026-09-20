@@ -101,6 +101,7 @@ class PrivacyShadeOverlayService : Service() {
 
         startForeground(NOTIFICATION_ID, buildNotification())
         isRunning = true
+        PrivacyQuickSettingsTileService.requestListeningRefresh(this)
 
         if (shadeView == null) {
             setupShadeOverlay()
@@ -382,6 +383,78 @@ class PrivacyShadeOverlayService : Service() {
             }
             panel.addView(densityBar)
 
+            // Move the clear area to the text, keyboard, or video controls currently in use.
+            val windowPositionLabel = TextView(this).apply {
+                text = "집중 시야창 위치: ${(spotlightYRatio * 100).toInt()}%"
+                setTextColor(Color.parseColor("#94A3B8"))
+                textSize = 11f
+                setPadding(0, dpToPx(6), 0, dpToPx(2))
+            }
+            panel.addView(windowPositionLabel)
+
+            val windowPositionBar = SeekBar(this).apply {
+                max = 80 // 10% to 90% of screen height
+                progress = ((spotlightYRatio - 0.10f) * 100).toInt().coerceIn(0, 80)
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                        spotlightYRatio = 0.10f + (progress / 100f)
+                        windowPositionLabel.text = "집중 시야창 위치: ${(spotlightYRatio * 100).toInt()}%"
+                        shadeView?.invalidate()
+                    }
+                    override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                    override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                })
+            }
+            panel.addView(windowPositionBar)
+
+            // One-tap privacy presets. They deliberately alter the visible area rather than
+            // claiming to produce angle-specific optical filtering.
+            val presetRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dpToPx(8) }
+            }
+            fun presetButton(label: String, color: Int, onClick: () -> Unit): TextView = TextView(this).apply {
+                text = label
+                setTextColor(color)
+                textSize = 10f
+                gravity = Gravity.CENTER
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor("#1E293B"))
+                    cornerRadius = dpToPx(8).toFloat()
+                    setStroke(dpToPx(1), color)
+                }
+                setPadding(dpToPx(4), dpToPx(6), dpToPx(4), dpToPx(6))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = dpToPx(4)
+                }
+                setOnClickListener { onClick() }
+            }
+            presetRow.addView(presetButton("균형", Color.parseColor("#00F0FF")) {
+                filterOpacity = 0.62f
+                isSpotlightEnabled = true
+                spotlightHeightDp = 180f
+                shadeView?.invalidate()
+                rebuildControllerView(container, params)
+            })
+            presetRow.addView(presetButton("좁은 시야창", Color.parseColor("#00FF66")) {
+                filterOpacity = 0.80f
+                isSpotlightEnabled = true
+                spotlightHeightDp = 96f
+                shadeView?.invalidate()
+                rebuildControllerView(container, params)
+            })
+            presetRow.addView(presetButton("블랙아웃", Color.parseColor("#FF3366")) {
+                filterOpacity = 0.90f
+                isSpotlightEnabled = false
+                shadeView?.invalidate()
+                rebuildControllerView(container, params)
+            })
+            panel.addView(presetRow)
+
             // Action Buttons Row: Spotlight Mode & Shut down
             val actionRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -453,6 +526,7 @@ class PrivacyShadeOverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        PrivacyQuickSettingsTileService.requestListeningRefresh(this)
         val wm = windowManager
         if (wm != null) {
             try {

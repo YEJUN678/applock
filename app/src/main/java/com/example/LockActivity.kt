@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
@@ -58,6 +59,8 @@ class LockActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The authentication screen must never appear in captures or the recents thumbnail.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)
         enableEdgeToEdge()

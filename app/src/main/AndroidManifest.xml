@@ -101,6 +101,29 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Privacy screen filter overlay to protect screen confidentiality" />
         </service>
+
+        <!-- Appears in Android's Quick Settings tile editor; users add it once and then tap to toggle. -->
+        <service
+            android:name=".service.PrivacyQuickSettingsTileService"
+            android:icon="@drawable/ic_privacy_tile"
+            android:label="@string/privacy_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".service.InstantLockQuickSettingsTileService"
+            android:icon="@drawable/ic_privacy_tile"
+            android:label="@string/instant_lock_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
