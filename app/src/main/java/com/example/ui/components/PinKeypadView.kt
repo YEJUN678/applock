@@ -144,11 +144,18 @@ fun PinKeypadView(
         Spacer(modifier = Modifier.height(12.dp))
 
         // Keypad grid (3 x 4)
+        val digitList = remember(isScrambleKeypad) {
+            if (isScrambleKeypad) {
+                listOf("0", "1", "2", "3", "4", "5", "6", "7", "8", "9").shuffled()
+            } else {
+                listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
+            }
+        }
         val digits = listOf(
-            listOf("1", "2", "3"),
-            listOf("4", "5", "6"),
-            listOf("7", "8", "9"),
-            listOf("", "0", "DEL")
+            listOf(digitList[0], digitList[1], digitList[2]),
+            listOf(digitList[3], digitList[4], digitList[5]),
+            listOf(digitList[6], digitList[7], digitList[8]),
+            listOf("", digitList[9], "DEL")
         )
 
         Column(

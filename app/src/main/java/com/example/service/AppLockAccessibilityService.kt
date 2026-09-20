@@ -85,16 +85,59 @@ class AppLockAccessibilityService : AccessibilityService() {
 
         val eventType = event.eventType
         if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED &&
+            eventType != AccessibilityEvent.TYPE_VIEW_CLICKED &&
+            eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED) {
             return
         }
+
+        // CRITICAL FOR POP-UP VIEW & MULTI-WINDOW:
+        // Inspect all interactive windows currently displayed (covers Samsung Pop-up View, Freeform, Split Screen)
+        try {
+            val currentWindows = windows
+            if (!currentWindows.isNullOrEmpty()) {
+                for (win in currentWindows) {
+                    val root = win.root ?: continue
+                    val winPkg = root.packageName?.toString() ?: continue
+                    if (winPkg == applicationContext.packageName) continue
+                    if (winPkg == "com.android.systemui" || winPkg == "android") continue
+                    if (AppLockPermissionHelper.isInputMethodPackage(applicationContext, winPkg)) continue
+
+                    if (AppLockPreferences.isPackageLocked(applicationContext, winPkg)) {
+                        if (!AppLockPreferences.isTemporarilyUnlocked(winPkg)) {
+                            LockActivity.start(applicationContext, winPkg)
+                            return
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
 
         val now = System.currentTimeMillis()
         val packageName = event.packageName?.toString() ?: return
 
-        // Skip self package
+        // Track self package transitions (MainActivity handles its own lock screen upon resume)
         if (packageName == applicationContext.packageName) {
+            lastForegroundPackage = packageName
             return
+        }
+
+        // Uninstall Protection: Intercept package installer and app uninstall dialogs
+        val isUninstallPackage = packageName == "com.google.android.packageinstaller" ||
+                packageName == "com.android.packageinstaller" ||
+                packageName == "com.samsung.android.packageinstaller" ||
+                packageName == "com.miui.packageinstaller" ||
+                packageName == "com.coloros.packageinstaller" ||
+                packageName == "com.vivo.packageinstaller" ||
+                packageName.endsWith(".packageinstaller")
+
+        val isUninstallAttempt = isUninstallPackage || (packageName == "com.android.settings" && isUninstallScreen(event))
+        if (AppLockPreferences.isUninstallProtectionEnabled(applicationContext) && isUninstallAttempt) {
+            if (!AppLockPreferences.isTemporarilyUnlocked(packageName)) {
+                LockActivity.start(applicationContext, packageName)
+                return
+            }
         }
 
         // Ignore system UI overlays (notifications shade, status bar, volume dialog)
@@ -120,7 +163,9 @@ class AppLockAccessibilityService : AccessibilityService() {
 
         // If switched to a new distinct app (and NOT an input method / system UI), check previous app
         if (lastForegroundPackage.isNotEmpty() && lastForegroundPackage != packageName) {
-            if (AppLockPreferences.isPackageLocked(applicationContext, lastForegroundPackage)) {
+            val isPrevLocked = AppLockPreferences.isPackageLocked(applicationContext, lastForegroundPackage) ||
+                    (lastForegroundPackage == applicationContext.packageName && AppLockPreferences.getLockConfig(applicationContext).isAppSelfProtectEnabled)
+            if (isPrevLocked) {
                 // Only clear if lock timeout is set to 0 (immediate)
                 val config = AppLockPreferences.getLockConfig(applicationContext)
                 if (config.lockTimeoutSeconds <= 0) {
@@ -140,6 +185,17 @@ class AppLockAccessibilityService : AccessibilityService() {
                 AppLockPreferences.touchTemporarilyUnlocked(packageName)
             }
         }
+    }
 
+    private fun isUninstallScreen(event: AccessibilityEvent): Boolean {
+        val className = event.className?.toString() ?: ""
+        if (className.contains("Uninstall", ignoreCase = true) ||
+            className.contains("Delete", ignoreCase = true) ||
+            className.contains("PackageInstaller", ignoreCase = true) ||
+            className.contains("InstalledAppDetails", ignoreCase = true)) {
+            return true
+        }
+        val text = event.text.joinToString(" ")
+        return text.contains("삭제") || text.contains("제거") || text.contains("Uninstall") || text.contains("Delete")
     }
 }

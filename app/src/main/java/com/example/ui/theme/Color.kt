@@ -7,6 +7,9 @@ val CyberSurfaceDark = Color(0xFF131B2E)
 val CyberCardDark = Color(0xFF1C253B)
 val CyberBorder = Color(0xFF2E3D5B)
 
+val CyberBackground = CyberBgDark
+val CyberCardBg = CyberCardDark
+
 val NeonCyan = Color(0xFF00F0FF)
 val NeonPurple = Color(0xFFBD00FF)
 val NeonGreen = Color(0xFF00FF66)

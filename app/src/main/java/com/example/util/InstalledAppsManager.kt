@@ -68,7 +68,7 @@ object InstalledAppsManager {
 
             for (resolveInfo in resolveInfos) {
                 val pkgName = resolveInfo.activityInfo?.packageName ?: continue
-                if (pkgName == selfPackage || foundPackages.contains(pkgName)) continue
+                if (foundPackages.contains(pkgName)) continue
 
                 val appInfo = try {
                     resolveInfo.activityInfo?.applicationInfo ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -97,12 +97,13 @@ object InstalledAppsManager {
                 }
 
                 foundPackages.add(pkgName)
+                val isSelf = (pkgName == selfPackage)
                 appList.add(
                     AppItem(
                         id = pkgName,
-                        name = appName,
+                        name = if (isSelf) "🛡️ App Lock (본 앱 자체 보호)" else appName,
                         packageName = pkgName,
-                        category = if (isSystem) "시스템 앱" else "사용자 설치 앱",
+                        category = if (isSelf) "보호 잠금 관리자" else if (isSystem) "시스템 앱" else "사용자 설치 앱",
                         isLocked = currentlyLockedPackages.contains(pkgName),
                         isSystemApp = isSystem,
                         iconDrawable = icon
@@ -124,13 +125,13 @@ object InstalledAppsManager {
 
             for (appInfo in installedApps) {
                 val pkgName = appInfo.packageName ?: continue
-                if (pkgName == selfPackage || foundPackages.contains(pkgName)) continue
+                if (foundPackages.contains(pkgName)) continue
 
                 val launchIntent = pm.getLaunchIntentForPackage(pkgName)
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
 
                 // Include if launchable OR user installed app
-                if (launchIntent != null || !isSystem) {
+                if (launchIntent != null || !isSystem || pkgName == selfPackage) {
                     val appName = try {
                         pm.getApplicationLabel(appInfo).toString()
                     } catch (_: Throwable) {
@@ -142,12 +143,13 @@ object InstalledAppsManager {
                         null
                     }
                     foundPackages.add(pkgName)
+                    val isSelf = (pkgName == selfPackage)
                     appList.add(
                         AppItem(
                             id = pkgName,
-                            name = appName,
+                            name = if (isSelf) "🛡️ App Lock (본 앱 자체 보호)" else appName,
                             packageName = pkgName,
-                            category = if (isSystem) "시스템 앱" else "사용자 설치 앱",
+                            category = if (isSelf) "보호 잠금 관리자" else if (isSystem) "시스템 앱" else "사용자 설치 앱",
                             isLocked = currentlyLockedPackages.contains(pkgName),
                             isSystemApp = isSystem,
                             iconDrawable = icon
@@ -159,9 +161,16 @@ object InstalledAppsManager {
             // continue
         }
 
-        // 3. Fallback: If sandbox or device package manager returns very few or 0 items
-        if (appList.size < 3) {
-            val defaultApps = listOf(
+        // 3. Enrich with popular essential apps (KakaoTalk, YouTube, Instagram, Toss, KakaoBank, etc.)
+        val defaultApps = listOf(
+            AppItem(
+                id = selfPackage,
+                name = "🛡️ App Lock (본 앱 자체 보호)",
+                packageName = selfPackage,
+                category = "보호 잠금 관리자",
+                isLocked = currentlyLockedPackages.contains(selfPackage),
+                isSystemApp = false
+            ),
                 AppItem(
                     id = "com.kakao.talk",
                     name = "카카오톡 (KakaoTalk)",
@@ -212,10 +221,90 @@ object InstalledAppsManager {
                 ),
                 AppItem(
                     id = "viva.republica.toss",
-                    name = "토스 (Toss)",
+                    name = "토스 (Toss 금융)",
                     packageName = "viva.republica.toss",
                     category = "금융 / 보안",
                     isLocked = currentlyLockedPackages.contains("viva.republica.toss"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.kakaobank.channel",
+                    name = "카카오뱅크 (KakaoBank)",
+                    packageName = "com.kakaobank.channel",
+                    category = "금융 / 보안",
+                    isLocked = currentlyLockedPackages.contains("com.kakaobank.channel"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.towneers.member",
+                    name = "당근 (당근마켓)",
+                    packageName = "com.towneers.member",
+                    category = "쇼핑 / 거래",
+                    isLocked = currentlyLockedPackages.contains("com.towneers.member"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.sample.baemin",
+                    name = "배달의민족 (Baemin)",
+                    packageName = "com.sample.baemin",
+                    category = "생활 / 음식",
+                    isLocked = currentlyLockedPackages.contains("com.sample.baemin"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.coupang.mobile",
+                    name = "쿠팡 (Coupang)",
+                    packageName = "com.coupang.mobile",
+                    category = "쇼핑",
+                    isLocked = currentlyLockedPackages.contains("com.coupang.mobile"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.netflix.mediaclient",
+                    name = "넷플릭스 (Netflix)",
+                    packageName = "com.netflix.mediaclient",
+                    category = "동영상 / 미디어",
+                    isLocked = currentlyLockedPackages.contains("com.netflix.mediaclient"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "org.telegram.messenger",
+                    name = "텔레그램 (Telegram)",
+                    packageName = "org.telegram.messenger",
+                    category = "메신저 / SNS",
+                    isLocked = currentlyLockedPackages.contains("org.telegram.messenger"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.discord",
+                    name = "디스코드 (Discord)",
+                    packageName = "com.discord",
+                    category = "메신저 / 커뮤니티",
+                    isLocked = currentlyLockedPackages.contains("com.discord"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.zhiliaoapp.musically",
+                    name = "틱톡 (TikTok)",
+                    packageName = "com.zhiliaoapp.musically",
+                    category = "동영상 / SNS",
+                    isLocked = currentlyLockedPackages.contains("com.zhiliaoapp.musically"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.twitter.android",
+                    name = "X (구 트위터)",
+                    packageName = "com.twitter.android",
+                    category = "SNS / 소통",
+                    isLocked = currentlyLockedPackages.contains("com.twitter.android"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.facebook.katana",
+                    name = "페이스북 (Facebook)",
+                    packageName = "com.facebook.katana",
+                    category = "SNS / 소통",
+                    isLocked = currentlyLockedPackages.contains("com.facebook.katana"),
                     isSystemApp = false
                 ),
                 AppItem(
@@ -233,18 +322,91 @@ object InstalledAppsManager {
                     category = "시스템 앱",
                     isLocked = currentlyLockedPackages.contains("com.android.camera"),
                     isSystemApp = true
+                ),
+                AppItem(
+                    id = "com.android.contacts",
+                    name = "연락처 / 전화 (Contacts)",
+                    packageName = "com.android.contacts",
+                    category = "연락처 / 통화",
+                    isLocked = currentlyLockedPackages.contains("com.android.contacts"),
+                    isSystemApp = true
+                ),
+                AppItem(
+                    id = "com.google.android.apps.messaging",
+                    name = "메시지 (SMS)",
+                    packageName = "com.google.android.apps.messaging",
+                    category = "메시지",
+                    isLocked = currentlyLockedPackages.contains("com.google.android.apps.messaging"),
+                    isSystemApp = true
+                ),
+                AppItem(
+                    id = "com.android.vending",
+                    name = "Google Play 스토어 (앱 설치 및 결제)",
+                    packageName = "com.android.vending",
+                    category = "시스템 앱",
+                    isLocked = currentlyLockedPackages.contains("com.android.vending"),
+                    isSystemApp = true
+                ),
+                AppItem(
+                    id = "com.google.android.apps.nbu.files",
+                    name = "파일 관리자 (Files)",
+                    packageName = "com.google.android.apps.nbu.files",
+                    category = "시스템 도구",
+                    isLocked = currentlyLockedPackages.contains("com.google.android.apps.nbu.files"),
+                    isSystemApp = true
+                ),
+                AppItem(
+                    id = "com.nhn.android.webtoon",
+                    name = "네이버 웹툰 (Webtoon)",
+                    packageName = "com.nhn.android.webtoon",
+                    category = "엔터테인먼트",
+                    isLocked = currentlyLockedPackages.contains("com.nhn.android.webtoon"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "notion.id",
+                    name = "노션 (Notion 메모)",
+                    packageName = "notion.id",
+                    category = "생산성 / 업무",
+                    isLocked = currentlyLockedPackages.contains("notion.id"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.kbstar.kbbank",
+                    name = "KB국민은행 (KB스타뱅킹)",
+                    packageName = "com.kbstar.kbbank",
+                    category = "금융 / 보안",
+                    isLocked = currentlyLockedPackages.contains("com.kbstar.kbbank"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.shinhan.sbanking",
+                    name = "신한 SOL뱅크",
+                    packageName = "com.shinhan.sbanking",
+                    category = "금융 / 보안",
+                    isLocked = currentlyLockedPackages.contains("com.shinhan.sbanking"),
+                    isSystemApp = false
+                ),
+                AppItem(
+                    id = "com.iloen.melon",
+                    name = "멜론 (Melon 음악)",
+                    packageName = "com.iloen.melon",
+                    category = "음악 / 미디어",
+                    isLocked = currentlyLockedPackages.contains("com.iloen.melon"),
+                    isSystemApp = false
                 )
-            )
-            for (app in defaultApps) {
-                if (!foundPackages.contains(app.packageName)) {
-                    appList.add(app)
-                }
+        )
+        for (app in defaultApps) {
+            if (!foundPackages.contains(app.packageName)) {
+                appList.add(app)
+                foundPackages.add(app.packageName)
             }
         }
 
-        // Sort: user installed apps first, then alphabetically
+        // Sort: Self-App FIRST, then user installed apps, then alphabetically
         return@withContext appList.sortedWith(
-            compareBy<AppItem> { it.isSystemApp }
+            compareBy<AppItem> { it.packageName != selfPackage }
+                .thenBy { it.isSystemApp }
                 .thenBy { it.name.lowercase() }
         )
     }

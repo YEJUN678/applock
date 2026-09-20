@@ -32,6 +32,7 @@
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
+        android:restoreAnyVersion="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -59,6 +60,8 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:taskAffinity=""
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:windowSoftInputMode="adjustNothing"
             android:theme="@style/Theme.MyApplication" />
 
@@ -86,6 +89,17 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="AppLock security monitoring service to protect user data" />
+        </service>
+
+        <!-- System-wide Privacy Screen Filter Overlay Service -->
+        <service
+            android:name=".service.PrivacyShadeOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            tools:targetApi="upside_down_cake">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Privacy screen filter overlay to protect screen confidentiality" />
         </service>
     </application>
 

@@ -82,9 +82,11 @@ class LockActivity : FragmentActivity() {
                             onSuccess = {
                                 if (targetPackage.isNotEmpty()) {
                                     AppLockPreferences.setTemporarilyUnlocked(targetPackage)
-                                    InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
+                                    if (targetPackage != packageName) {
+                                        InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
+                                    }
                                 }
-                                Toast.makeText(this@LockActivity, "생체 인증 성공! 앱을 실행합니다.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this@LockActivity, "생체 인증 성공!", Toast.LENGTH_SHORT).show()
                                 finish()
                             },
                             onFailed = {
@@ -105,20 +107,27 @@ class LockActivity : FragmentActivity() {
                     gridSize = lockConfig.gridSize,
                     targetPattern = lockConfig.savedPattern,
                     targetPin = lockConfig.savedPin,
+                    targetPassword = lockConfig.savedPassword,
+                    targetCalculatorCode = lockConfig.savedCalculatorCode,
+                    targetKnockCode = lockConfig.savedKnockCode,
                     backgroundTheme = lockConfig.backgroundTheme,
                     biometricEnabled = lockConfig.biometricEnabled,
                     isStealthPattern = lockConfig.isStealthPattern,
                     isFakeCrashEnabled = lockConfig.isFakeCrashEnabled,
                     isVibrationEnabled = lockConfig.isVibrationEnabled,
+                    isRandomPinKeypad = lockConfig.isRandomPinKeypad,
+                    isIntruderSirenEnabled = lockConfig.isIntruderSirenEnabled,
                     onRequestBiometric = {
                         requestBiometricUnlock(
                             appName = appName,
                             onSuccess = {
                                 if (targetPackage.isNotEmpty()) {
                                     AppLockPreferences.setTemporarilyUnlocked(targetPackage)
-                                    InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
+                                    if (targetPackage != packageName) {
+                                        InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
+                                    }
                                 }
-                                Toast.makeText(this@LockActivity, "생체 인증 성공! 앱을 실행합니다.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this@LockActivity, "생체 인증 성공!", Toast.LENGTH_SHORT).show()
                                 finish()
                             },
                             onFailed = {
@@ -133,9 +142,11 @@ class LockActivity : FragmentActivity() {
                     onUnlockSuccess = {
                         if (targetPackage.isNotEmpty()) {
                             AppLockPreferences.setTemporarilyUnlocked(targetPackage)
-                            InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
+                            if (targetPackage != packageName) {
+                                InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
+                            }
                         }
-                        Toast.makeText(this@LockActivity, "인증 성공! 앱을 실행합니다.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@LockActivity, "인증 성공!", Toast.LENGTH_SHORT).show()
                         finish()
                     },
                     onFailedAttempt = { attempts ->

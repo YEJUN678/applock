@@ -6,8 +6,8 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Lock settings and the vault key are required to reopen preserved vault files. -->
+    <include domain="sharedpref" path="." />
+    <!-- Vault files are restored by Android Backup after a reinstall. -->
+    <include domain="file" path="secure_vault_files" />
 </full-backup-content>

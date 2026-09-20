@@ -62,7 +62,10 @@ import androidx.compose.ui.unit.sp
 import com.example.model.BackgroundTheme
 import com.example.model.LockType
 import com.example.ui.components.AppLockBackground
+import com.example.ui.components.CalculatorDisguiseLockView
+import com.example.ui.components.KnockCodeLockView
 import com.example.ui.components.NxNPatternLockView
+import com.example.ui.components.PasswordLockView
 import com.example.ui.components.PinKeypadView
 import com.example.ui.theme.CyberBorder
 import com.example.ui.theme.NeonCyan
@@ -80,11 +83,16 @@ fun LockOverlayScreen(
     gridSize: Int,
     targetPattern: List<Int>,
     targetPin: String = "1234",
+    targetPassword: String = "admin1234",
+    targetCalculatorCode: String = "1234",
+    targetKnockCode: List<Int> = listOf(1, 2, 3, 4),
     backgroundTheme: BackgroundTheme,
     biometricEnabled: Boolean,
     isStealthPattern: Boolean = false,
     isFakeCrashEnabled: Boolean = false,
     isVibrationEnabled: Boolean = true,
+    isRandomPinKeypad: Boolean = false,
+    isIntruderSirenEnabled: Boolean = false,
     onRequestBiometric: (() -> Unit)? = null,
     onUnlockSuccess: () -> Unit,
     onFailedAttempt: ((Int) -> Unit)? = null,
@@ -94,7 +102,15 @@ fun LockOverlayScreen(
     var isError by remember { mutableStateOf(false) }
     var attemptCount by remember { mutableIntStateOf(0) }
     var messageText by remember {
-        mutableStateOf(if (lockType == LockType.PIN) "숫자 PIN 비밀번호를 입력하세요" else "보안 패턴을 입력하세요")
+        mutableStateOf(
+            when (lockType) {
+                LockType.PIN -> "숫자 PIN 비밀번호를 입력하세요"
+                LockType.PATTERN -> "보안 패턴을 입력하세요"
+                LockType.PASSWORD -> "보안 비밀번호를 입력하세요"
+                LockType.CALCULATOR -> "암호 입력 후 '=' 버튼을 터치하세요"
+                LockType.KNOCK_CODE -> "4분면 노크 코드를 터치하세요"
+            }
+        )
     }
     var showBiometricModal by remember { mutableStateOf(false) }
     var showFakeCrash by remember { mutableStateOf(isFakeCrashEnabled) }
@@ -104,10 +120,12 @@ fun LockOverlayScreen(
         if (isError) {
             delay(1200)
             isError = false
-            messageText = if (lockType == LockType.PIN) {
-                "숫자 PIN 비밀번호를 다시 입력하세요"
-            } else {
-                "보안 패턴을 다시 입력하세요 (${gridSize}x${gridSize} 그리드)"
+            messageText = when (lockType) {
+                LockType.PIN -> "숫자 PIN 비밀번호를 다시 입력하세요"
+                LockType.PATTERN -> "보안 패턴을 다시 입력하세요 (${gridSize}x${gridSize} 그리드)"
+                LockType.PASSWORD -> "비밀번호를 다시 입력하세요"
+                LockType.CALCULATOR -> "올바른 암호 입력 후 '=' 버튼을 누르세요"
+                LockType.KNOCK_CODE -> "노크 코드를 다시 순서대로 터치하세요"
             }
         }
     }
@@ -236,54 +254,129 @@ fun LockOverlayScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // The Authentication Input: PIN Keypad or N x N Pattern Lock
-            if (lockType == LockType.PIN) {
-                PinKeypadView(
-                    targetLength = targetPin.length.coerceIn(4, 8),
-                    isError = isError,
-                    enabled = !isError,
-                    isVibrationEnabled = isVibrationEnabled,
-                    onPinCompleted = { enteredPin ->
-                        if (enteredPin == targetPin) {
-                            onUnlockSuccess()
-                        } else {
-                            isError = true
-                            attemptCount++
-                            onFailedAttempt?.invoke(attemptCount)
-                            messageText = if (attemptCount >= 3) {
-                                "⚠️ 3회 실패! 침입 시도가 기록되었습니다."
+            // The Authentication Input: PIN, Pattern, Password, Calculator, or Knock Code
+            when (lockType) {
+                LockType.PIN -> {
+                    PinKeypadView(
+                        targetLength = targetPin.length.coerceIn(4, 8),
+                        isError = isError,
+                        enabled = !isError,
+                        isScrambleKeypad = isRandomPinKeypad,
+                        isVibrationEnabled = isVibrationEnabled,
+                        onPinCompleted = { enteredPin ->
+                            if (enteredPin == targetPin) {
+                                onUnlockSuccess()
                             } else {
-                                "비밀번호가 일치하지 않습니다! (${attemptCount}회 실패)"
+                                isError = true
+                                attemptCount++
+                                if (isIntruderSirenEnabled && attemptCount >= 2) {
+                                    com.example.util.IntruderAlertSound.playAlertSiren()
+                                }
+                                onFailedAttempt?.invoke(attemptCount)
+                                messageText = if (attemptCount >= 3) {
+                                    "⚠️ 3회 실패! 침입 시도가 기록되었습니다."
+                                } else {
+                                    "PIN 번호가 일치하지 않습니다! (${attemptCount}회 실패)"
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            } else {
-                NxNPatternLockView(
-                    gridSize = gridSize,
-                    isError = isError,
-                    enabled = !isError,
-                    isStealthMode = isStealthPattern,
-                    isVibrationEnabled = isVibrationEnabled,
-                    onPatternCompleted = { drawnPattern ->
-                        if (drawnPattern == targetPattern) {
-                            onUnlockSuccess()
-                        } else {
-                            isError = true
-                            attemptCount++
-                            onFailedAttempt?.invoke(attemptCount)
-                            messageText = if (attemptCount >= 3) {
-                                "⚠️ 3회 실패! 침입 시도가 기록되었습니다."
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                LockType.PATTERN -> {
+                    NxNPatternLockView(
+                        gridSize = gridSize,
+                        isError = isError,
+                        enabled = !isError,
+                        isStealthMode = isStealthPattern,
+                        isVibrationEnabled = isVibrationEnabled,
+                        onPatternCompleted = { drawnPattern ->
+                            if (drawnPattern == targetPattern) {
+                                onUnlockSuccess()
                             } else {
-                                "패턴이 일치하지 않습니다! (${attemptCount}회 실패)"
+                                isError = true
+                                attemptCount++
+                                onFailedAttempt?.invoke(attemptCount)
+                                messageText = if (attemptCount >= 3) {
+                                    "⚠️ 3회 실패! 침입 시도가 기록되었습니다."
+                                } else {
+                                    "패턴이 일치하지 않습니다! (${attemptCount}회 실패)"
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = (if (gridSize > 6) 0.dp else 16.dp))
-                )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = (if (gridSize > 6) 0.dp else 16.dp))
+                    )
+                }
+                LockType.PASSWORD -> {
+                    PasswordLockView(
+                        isError = isError,
+                        enabled = !isError,
+                        isVibrationEnabled = isVibrationEnabled,
+                        onPasswordSubmitted = { enteredPassword ->
+                            if (enteredPassword == targetPassword) {
+                                onUnlockSuccess()
+                            } else {
+                                isError = true
+                                attemptCount++
+                                onFailedAttempt?.invoke(attemptCount)
+                                messageText = if (attemptCount >= 3) {
+                                    "⚠️ 3회 실패! 침입 시도가 기록되었습니다."
+                                } else {
+                                    "비밀번호가 일치하지 않습니다! (${attemptCount}회 실패)"
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                LockType.CALCULATOR -> {
+                    CalculatorDisguiseLockView(
+                        targetCode = targetCalculatorCode,
+                        isError = isError,
+                        enabled = !isError,
+                        isVibrationEnabled = isVibrationEnabled,
+                        onCodeSubmitted = { enteredCode ->
+                            if (enteredCode == targetCalculatorCode || enteredCode == targetPin) {
+                                onUnlockSuccess()
+                            } else {
+                                isError = true
+                                attemptCount++
+                                onFailedAttempt?.invoke(attemptCount)
+                                messageText = if (attemptCount >= 3) {
+                                    "⚠️ 3회 실패! 침입 시도가 기록되었습니다."
+                                } else {
+                                    "암호가 일치하지 않습니다! (${attemptCount}회 실패)"
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                LockType.KNOCK_CODE -> {
+                    KnockCodeLockView(
+                        targetKnockCode = targetKnockCode,
+                        isError = isError,
+                        enabled = !isError,
+                        isVibrationEnabled = isVibrationEnabled,
+                        onKnockCompleted = { enteredKnock ->
+                            if (enteredKnock == targetKnockCode) {
+                                onUnlockSuccess()
+                            } else {
+                                isError = true
+                                attemptCount++
+                                onFailedAttempt?.invoke(attemptCount)
+                                messageText = if (attemptCount >= 3) {
+                                    "⚠️ 3회 실패! 침입 시도가 기록되었습니다."
+                                } else {
+                                    "노크 코드가 일치하지 않습니다! (${attemptCount}회 실패)"
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.weight(1f))

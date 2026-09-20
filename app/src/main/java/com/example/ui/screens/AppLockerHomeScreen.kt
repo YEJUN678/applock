@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.EnhancedEncryption
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.History
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -94,8 +97,15 @@ import com.example.model.IntruderLog
 import com.example.model.LockConfig
 import com.example.model.LockType
 import com.example.ui.components.AppItemCard
+import com.example.ui.components.BatchTimeoutDialog
+import com.example.ui.components.ChangeCalculatorCodeModal
+import com.example.ui.components.ChangeKnockCodeModal
+import com.example.ui.components.ChangePasswordModal
 import com.example.ui.components.ChangePinModal
 import com.example.ui.components.NxNPatternLockView
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Checklist
 import com.example.ui.theme.CyberBgDark
 import com.example.ui.theme.CyberBorder
 import com.example.ui.theme.CyberCardDark
@@ -129,18 +139,28 @@ fun AppLockerHomeScreen(
     onToggleLock: (String, Boolean) -> Unit,
     onLockAll: () -> Unit,
     onUnlockAll: () -> Unit,
+    onBatchLock: (Set<String>, Boolean) -> Unit = { _, _ -> },
+    onBatchTimeout: (Int) -> Unit = {},
     onClearIntruderLogs: () -> Unit,
     onDeleteIntruderLog: (String) -> Unit = {},
     onCaptureTestSelfie: () -> Unit = {},
     onLockConfigChanged: (LockConfig) -> Unit,
     onTestLaunchApp: (AppItem) -> Unit,
+    onOpenVault: () -> Unit = {},
+    onTogglePrivacyFilter: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(1) } // 0: Locked, 1: Unlocked, 2: Intruder Selfie, 3: Settings
     var searchQuery by remember { mutableStateOf("") }
     var showSetPatternSheet by remember { mutableStateOf(false) }
     var showSetPinSheet by remember { mutableStateOf(false) }
+    var showSetPasswordSheet by remember { mutableStateOf(false) }
+    var showSetCalculatorSheet by remember { mutableStateOf(false) }
+    var showSetKnockSheet by remember { mutableStateOf(false) }
     var showThemeSheet by remember { mutableStateOf(false) }
+    var showBatchTimeoutDialog by remember { mutableStateOf(false) }
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedPackages by remember { mutableStateOf(setOf<String>()) }
 
     val filteredApps = remember(apps, searchQuery) {
         if (searchQuery.isBlank()) apps
@@ -189,12 +209,36 @@ fun AppLockerHomeScreen(
                         )
                     }
 
-                    // Top Icons: Theme %, Settings %, Refresh
+                    // Top Icons: Vault, Privacy Shade, Theme, Settings, Refresh
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        // 1. Theme icon at top
+                        // 1. Vault icon (AES-256 File Encrypt / Decrypt)
+                        IconButton(
+                            onClick = onOpenVault,
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EnhancedEncryption,
+                                contentDescription = "보안 파일 금고 (암호화/복호화)",
+                                tint = NeonGreen
+                            )
+                        }
+
+                        // 2. Privacy Shade filter
+                        IconButton(
+                            onClick = onTogglePrivacyFilter,
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VisibilityOff,
+                                contentDescription = "엿보기 방지 셰이드",
+                                tint = NeonAmber
+                            )
+                        }
+
+                        // 3. Theme icon at top
                         IconButton(
                             onClick = { showThemeSheet = true },
                             modifier = Modifier.size(38.dp)
@@ -206,19 +250,19 @@ fun AppLockerHomeScreen(
                             )
                         }
 
-                        // 2. Settings icon at top
+                        // 4. Settings icon at top
                         IconButton(
-                            onClick = { selectedTab = 2 },
+                            onClick = { selectedTab = 3 },
                             modifier = Modifier.size(38.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Settings,
                                 contentDescription = "보안 설정",
-                                tint = if (selectedTab == 2) NeonCyan else TextSecondary
+                                tint = if (selectedTab == 3) NeonCyan else TextSecondary
                             )
                         }
 
-                        // 3. Refresh icon
+                        // 5. Refresh icon
                         IconButton(
                             onClick = onRefreshApps,
                             modifier = Modifier.size(38.dp)
@@ -518,6 +562,145 @@ fun AppLockerHomeScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
             )
+
+            // Multi-select Control Bar
+            val currentTabApps = if (selectedTab == 0) lockedApps else unlockedApps
+            Surface(
+                color = if (isSelectionMode) CyberCardDark else Color.Transparent,
+                shape = RoundedCornerShape(12.dp),
+                border = if (isSelectionMode) androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)) else null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                if (!isSelectionMode) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (selectedTab == 0) "🔒 잠긴 앱 (${lockedApps.size}개)" else "📱 설치된 앱 (${unlockedApps.size}개)",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                isSelectionMode = true
+                                selectedPackages = emptySet()
+                            },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Checklist,
+                                contentDescription = null,
+                                tint = NeonCyan,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("다중 선택 모드", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "선택됨: ${selectedPackages.size}개",
+                                    color = NeonCyan,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = if (selectedPackages.size == currentTabApps.size && currentTabApps.isNotEmpty()) "전체 해제" else "전체 선택",
+                                    color = NeonAmber,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable {
+                                        selectedPackages = if (selectedPackages.size == currentTabApps.size && currentTabApps.isNotEmpty()) {
+                                            emptySet()
+                                        } else {
+                                            currentTabApps.map { it.packageName }.toSet()
+                                        }
+                                    }
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    isSelectionMode = false
+                                    selectedPackages = emptySet()
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = "다중 선택 종료", tint = TextSecondary)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Batch Action Buttons: Lock, Unlock, Re-lock Timeout
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (selectedPackages.isNotEmpty()) {
+                                        onBatchLock(selectedPackages, true)
+                                        isSelectionMode = false
+                                        selectedPackages = emptySet()
+                                    }
+                                },
+                                enabled = selectedPackages.isNotEmpty(),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("일괄 잠금", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    if (selectedPackages.isNotEmpty()) {
+                                        onBatchLock(selectedPackages, false)
+                                        isSelectionMode = false
+                                        selectedPackages = emptySet()
+                                    }
+                                },
+                                enabled = selectedPackages.isNotEmpty(),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = Color.Black),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("일괄 해제", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = { showBatchTimeoutDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonPurple, contentColor = Color.White),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.weight(1.2f)
+                            ) {
+                                Text("재잠금 시간", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Tab Content
@@ -553,6 +736,15 @@ fun AppLockerHomeScreen(
                                 items(lockedApps, key = { it.id }) { app ->
                                     AppItemCard(
                                         app = app,
+                                        isSelectionMode = isSelectionMode,
+                                        isSelected = selectedPackages.contains(app.packageName),
+                                        onSelectToggle = {
+                                            selectedPackages = if (selectedPackages.contains(app.packageName)) {
+                                                selectedPackages - app.packageName
+                                            } else {
+                                                selectedPackages + app.packageName
+                                            }
+                                        },
                                         onToggleLock = { onToggleLock(app.packageName, it) },
                                         onTestLaunch = { onTestLaunchApp(app) }
                                     )
@@ -582,6 +774,15 @@ fun AppLockerHomeScreen(
                                 items(unlockedApps, key = { it.id }) { app ->
                                     AppItemCard(
                                         app = app,
+                                        isSelectionMode = isSelectionMode,
+                                        isSelected = selectedPackages.contains(app.packageName),
+                                        onSelectToggle = {
+                                            selectedPackages = if (selectedPackages.contains(app.packageName)) {
+                                                selectedPackages - app.packageName
+                                            } else {
+                                                selectedPackages + app.packageName
+                                            }
+                                        },
                                         onToggleLock = { onToggleLock(app.packageName, it) },
                                         onTestLaunch = { onTestLaunchApp(app) }
                                     )
@@ -614,11 +815,17 @@ fun AppLockerHomeScreen(
                             },
                             onChangePattern = { showSetPatternSheet = true },
                             onChangePin = { showSetPinSheet = true },
+                            onChangePassword = { showSetPasswordSheet = true },
+                            onChangeCalculatorCode = { showSetCalculatorSheet = true },
+                            onChangeKnockCode = { showSetKnockSheet = true },
                             onChangeLockTimeout = { newTimeout ->
                                 onLockConfigChanged(lockConfig.copy(lockTimeoutSeconds = newTimeout))
                             },
                             onToggleVibration = {
                                 onLockConfigChanged(lockConfig.copy(isVibrationEnabled = it))
+                            },
+                            onToggleUninstallProtection = {
+                                onLockConfigChanged(lockConfig.copy(isUninstallProtectionEnabled = it))
                             },
                             onToggleAppSelfProtect = {
                                 onLockConfigChanged(lockConfig.copy(isAppSelfProtectEnabled = it))
@@ -638,6 +845,17 @@ fun AppLockerHomeScreen(
                             },
                             onChangeIntruderSelfieThreshold = {
                                 onLockConfigChanged(lockConfig.copy(intruderSelfieThreshold = it))
+                            },
+                            onOpenVault = onOpenVault,
+                            onTogglePrivacyFilter = onTogglePrivacyFilter,
+                            onToggleRandomPin = {
+                                onLockConfigChanged(lockConfig.copy(isRandomPinKeypad = it))
+                            },
+                            onToggleIntruderSiren = {
+                                onLockConfigChanged(lockConfig.copy(isIntruderSirenEnabled = it))
+                            },
+                            onTogglePanicShake = {
+                                onLockConfigChanged(lockConfig.copy(isPanicShakeEnabled = it))
                             }
                         )
                     }
@@ -674,6 +892,61 @@ fun AppLockerHomeScreen(
         )
     }
 
+    // Modal Sheet: Change Password
+    if (showSetPasswordSheet) {
+        ChangePasswordModal(
+            currentPassword = lockConfig.savedPassword,
+            onDismiss = { showSetPasswordSheet = false },
+            onSave = { newPassword ->
+                onLockConfigChanged(
+                    lockConfig.copy(savedPassword = newPassword)
+                )
+                showSetPasswordSheet = false
+            }
+        )
+    }
+
+    // Modal Sheet: Change Calculator Code
+    if (showSetCalculatorSheet) {
+        ChangeCalculatorCodeModal(
+            currentCode = lockConfig.savedCalculatorCode,
+            onDismiss = { showSetCalculatorSheet = false },
+            onSave = { newCode ->
+                onLockConfigChanged(
+                    lockConfig.copy(savedCalculatorCode = newCode)
+                )
+                showSetCalculatorSheet = false
+            }
+        )
+    }
+
+    // Modal Sheet: Change Knock Code
+    if (showSetKnockSheet) {
+        ChangeKnockCodeModal(
+            currentCode = lockConfig.savedKnockCode,
+            onDismiss = { showSetKnockSheet = false },
+            onSave = { newKnockCode ->
+                onLockConfigChanged(
+                    lockConfig.copy(savedKnockCode = newKnockCode)
+                )
+                showSetKnockSheet = false
+            }
+        )
+    }
+
+    // Dialog: Batch Timeout Setting
+    if (showBatchTimeoutDialog) {
+        BatchTimeoutDialog(
+            selectedCount = selectedPackages.size,
+            currentTimeoutSeconds = lockConfig.lockTimeoutSeconds,
+            onDismiss = { showBatchTimeoutDialog = false },
+            onTimeoutSelected = { newTimeout ->
+                onBatchTimeout(newTimeout)
+                showBatchTimeoutDialog = false
+            }
+        )
+    }
+
     // Modal Sheet: Change Theme
     if (showThemeSheet) {
         ChangeThemeModal(
@@ -700,15 +973,24 @@ fun SettingsView(
     onChangeLockType: (LockType) -> Unit,
     onChangePattern: () -> Unit,
     onChangePin: () -> Unit,
+    onChangePassword: () -> Unit = {},
+    onChangeCalculatorCode: () -> Unit = {},
+    onChangeKnockCode: () -> Unit = {},
     onChangeLockTimeout: (Int) -> Unit,
     onToggleVibration: (Boolean) -> Unit,
+    onToggleUninstallProtection: (Boolean) -> Unit = {},
     onToggleAppSelfProtect: (Boolean) -> Unit,
     onChangeTheme: () -> Unit,
     onToggleBiometric: (Boolean) -> Unit,
     onToggleStealthPattern: (Boolean) -> Unit,
     onToggleFakeCrash: (Boolean) -> Unit,
     onToggleIntruderSelfie: (Boolean) -> Unit = {},
-    onChangeIntruderSelfieThreshold: (Int) -> Unit = {}
+    onChangeIntruderSelfieThreshold: (Int) -> Unit = {},
+    onOpenVault: () -> Unit = {},
+    onTogglePrivacyFilter: () -> Unit = {},
+    onToggleRandomPin: (Boolean) -> Unit = {},
+    onToggleIntruderSiren: (Boolean) -> Unit = {},
+    onTogglePanicShake: (Boolean) -> Unit = {}
 ) {
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -923,6 +1205,268 @@ fun SettingsView(
             }
         }
 
+        // 3.5 Feature: Security File Vault (AES-256 File Crypto)
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.EnhancedEncryption,
+                                contentDescription = null,
+                                tint = NeonGreen
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "보안 파일 금고 (AES-256 암호화/복호화)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "모든 용량의 사진, 영상, 문서를 앱 고유 키로 스트리밍 암호화합니다. 이 앱 없이는 복호화가 불가능하며 필요 시 즉시 원본으로 복구합니다.",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onOpenVault,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NeonGreen,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EnhancedEncryption,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("보안 파일 금고 열기 (암호화/복호화 관리) ▶", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // 3.6 Feature: Anti-Peeping Privacy Filter
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.VisibilityOff,
+                                contentDescription = null,
+                                tint = NeonAmber
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "엿보기 방지 화면 가림막 (Privacy Shade)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "대중교통이나 공공장소에서 옆 사람의 시선을 차단하는 투명도 조절형 암막 가림막을 켭니다.",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = onTogglePrivacyFilter,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(imageVector = Icons.Default.VisibilityOff, contentDescription = null, tint = NeonAmber, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("화면 가림막 켜기 / 끄기 토글", color = NeonAmber, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // 3.7 Feature: Random PIN Keypad
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (lockConfig.isRandomPinKeypad) NeonCyan else CyberBorder
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.Dialpad,
+                                contentDescription = null,
+                                tint = NeonCyan
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "PIN 키패드 무작위 재배치 (Random Keypad)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "PIN 인증 시 0~9 숫자 위치를 무작위로 섞어 주변 엿보기 및 손가락 이동 패턴 추적을 방지합니다.",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = lockConfig.isRandomPinKeypad,
+                            onCheckedChange = onToggleRandomPin,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = NeonCyan
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3.8 Feature: Intruder Alarm Siren
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (lockConfig.isIntruderSirenEnabled) NeonRed else CyberBorder
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = null,
+                                tint = NeonRed
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "침입자 경보 사이렌 (Intruder Alarm Siren)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "잠금 해제 2회 이상 실패 시 큰 경보음을 울려 침입자를 쫓아냅니다.",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = lockConfig.isIntruderSirenEnabled,
+                            onCheckedChange = onToggleIntruderSiren,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = NeonRed
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3.9 Feature: Panic Shake to Lock
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (lockConfig.isPanicShakeEnabled) NeonPurple else CyberBorder
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = NeonPurple
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "긴급 안심 흔들기 즉시 재잠금 (Panic Shake)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "위급한 순간 스마트폰을 강하게 흔들면 임시 해제된 모든 잠금이 즉시 재설정되어 데이터를 보호합니다.",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = lockConfig.isPanicShakeEnabled,
+                            onCheckedChange = onTogglePanicShake,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = NeonPurple
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
         // 4. Feature: Stealth Pattern (패턴 선 숨김)
         item {
             Card(
@@ -971,7 +1515,7 @@ fun SettingsView(
             }
         }
 
-        // 5. Feature: Fake Crash Disguise (가짜 오류 위장)
+        // 5. Feature: Fake Crash Alert (오류 가림막)
         item {
             Card(
                 shape = RoundedCornerShape(18.dp),
@@ -994,13 +1538,13 @@ fun SettingsView(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "가짜 충돌 오류 위장 모드",
+                                    text = "앱 실행 오류 가림막 (Crash Alert 보호)",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary
                                 )
                                 Text(
-                                    text = "잠긴 앱 실행 시 '앱 작동 중지' 가짜 창을 띄웁니다. 확인 버튼을 길게 누르면 진짜 잠금창이 열립니다.",
+                                    text = "잠긴 앱 실행 시 시스템 오류 안내창을 띄워 접근을 방어합니다. 확인 버튼을 길게 누르면 인증 화면이 열립니다.",
                                     color = TextSecondary,
                                     fontSize = 12.sp
                                 )
@@ -1196,7 +1740,7 @@ fun SettingsView(
             }
         }
 
-        // 6.5 Security Type Selection: Pattern vs PIN
+        // 6.5 Security Type Selection: Pattern, PIN, Password, Calculator, Knock Code
         item {
             Card(
                 shape = RoundedCornerShape(18.dp),
@@ -1206,14 +1750,21 @@ fun SettingsView(
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val lockTypeIcon = when (lockConfig.lockType) {
+                            LockType.PIN -> Icons.Default.Dialpad
+                            LockType.PATTERN -> Icons.Default.GridOn
+                            LockType.PASSWORD -> Icons.Default.Password
+                            LockType.CALCULATOR -> Icons.Default.Calculate
+                            LockType.KNOCK_CODE -> Icons.Default.TouchApp
+                        }
                         Icon(
-                            imageVector = if (lockConfig.lockType == LockType.PIN) Icons.Default.Dialpad else Icons.Default.GridOn,
+                            imageVector = lockTypeIcon,
                             contentDescription = null,
                             tint = NeonCyan
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "잠금 인증 방식 (패턴 / PIN 비밀번호)",
+                            text = "잠금 인증 방식 (${lockConfig.lockType.title})",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
@@ -1221,11 +1772,13 @@ fun SettingsView(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "원하는 보안 잠금 형태를 선택하세요. 언제든지 변경할 수 있습니다.",
+                        text = "원하는 보안 잠금 형태를 선택하세요. 패턴, 숫자 PIN, 영문/숫자 비밀번호, 보안 계산기, 노크 코드 등을 지원합니다.",
                         color = TextSecondary,
                         fontSize = 12.sp
                     )
                     Spacer(modifier = Modifier.height(12.dp))
+
+                    // Row 1: Pattern, PIN
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1233,7 +1786,7 @@ fun SettingsView(
                         FilterChip(
                             selected = lockConfig.lockType == LockType.PATTERN,
                             onClick = { onChangeLockType(LockType.PATTERN) },
-                            label = { Text("패턴 잠금 (${lockConfig.gridSize}x${lockConfig.gridSize})") },
+                            label = { Text("패턴 (${lockConfig.gridSize}x${lockConfig.gridSize})") },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = NeonCyan,
                                 selectedLabelColor = Color.Black
@@ -1243,7 +1796,7 @@ fun SettingsView(
                         FilterChip(
                             selected = lockConfig.lockType == LockType.PIN,
                             onClick = { onChangeLockType(LockType.PIN) },
-                            label = { Text("4자리 PIN 숫자") },
+                            label = { Text("PIN (숫자)") },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = NeonCyan,
                                 selectedLabelColor = Color.Black
@@ -1251,17 +1804,109 @@ fun SettingsView(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    if (lockConfig.lockType == LockType.PIN) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedButton(
-                            onClick = onChangePin,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(imageVector = Icons.Default.Password, contentDescription = null, tint = NeonCyan)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("새 4자리 PIN 비밀번호 등록/변경", color = NeonCyan, fontWeight = FontWeight.Bold)
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Row 2: Password, Calculator, Knock Code
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = lockConfig.lockType == LockType.PASSWORD,
+                            onClick = { onChangeLockType(LockType.PASSWORD) },
+                            label = { Text("비밀번호", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = NeonCyan,
+                                selectedLabelColor = Color.Black
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = lockConfig.lockType == LockType.CALCULATOR,
+                            onClick = { onChangeLockType(LockType.CALCULATOR) },
+                            label = { Text("보안 계산기", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = NeonCyan,
+                                selectedLabelColor = Color.Black
+                            ),
+                            modifier = Modifier.weight(1.1f)
+                        )
+                        FilterChip(
+                            selected = lockConfig.lockType == LockType.KNOCK_CODE,
+                            onClick = { onChangeLockType(LockType.KNOCK_CODE) },
+                            label = { Text("노크 코드", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = NeonCyan,
+                                selectedLabelColor = Color.Black
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Configuration Button depending on active LockType
+                    when (lockConfig.lockType) {
+                        LockType.PIN -> {
+                            OutlinedButton(
+                                onClick = onChangePin,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(imageVector = Icons.Default.Dialpad, contentDescription = null, tint = NeonCyan)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("새 4자리 PIN 비밀번호 등록/변경", color = NeonCyan, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        LockType.PASSWORD -> {
+                            OutlinedButton(
+                                onClick = onChangePassword,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(imageVector = Icons.Default.Password, contentDescription = null, tint = NeonCyan)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("새 영문/숫자 비밀번호(Password) 등록/변경", color = NeonCyan, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        LockType.CALCULATOR -> {
+                            OutlinedButton(
+                                onClick = onChangeCalculatorCode,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(imageVector = Icons.Default.Calculate, contentDescription = null, tint = NeonCyan)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("계산기 해제 암호(=) 등록/변경 (현재: ${lockConfig.savedCalculatorCode})", color = NeonCyan, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        LockType.KNOCK_CODE -> {
+                            OutlinedButton(
+                                onClick = onChangeKnockCode,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(imageVector = Icons.Default.TouchApp, contentDescription = null, tint = NeonCyan)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("4분면 노크 코드 터치 순서 등록/변경 (${lockConfig.savedKnockCode.size}회)", color = NeonCyan, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        LockType.PATTERN -> {
+                            OutlinedButton(
+                                onClick = onChangePattern,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(imageVector = Icons.Default.GridOn, contentDescription = null, tint = NeonCyan)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("그리드 크기(${lockConfig.gridSize}x${lockConfig.gridSize}) 및 패턴 변경", color = NeonCyan, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -1359,6 +2004,53 @@ fun SettingsView(
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
                                 checkedTrackColor = NeonGreen
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // 6.8 Feature: Uninstall Protection (앱 삭제/제거 원천 방지 보호 스위치)
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (lockConfig.isUninstallProtectionEnabled) NeonRed else CyberBorder
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(imageVector = Icons.Default.Delete, contentDescription = null, tint = NeonRed)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "앱 삭제/제거 방지 보호 스위치",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "남이 어떤 앱도 임의로 삭제(Uninstall)하거나 시스템 패키지 관리자를 조작하지 못하도록 삭제 시도 화면을 즉각 원천 차단합니다.",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = lockConfig.isUninstallProtectionEnabled,
+                            onCheckedChange = onToggleUninstallProtection,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = NeonRed
                             )
                         )
                     }

@@ -52,6 +52,18 @@ object AppLockPermissionHelper {
         }
     }
 
+    fun requestOverlayPermission(context: Context) {
+        try {
+            context.startActivity(getOverlayPermissionIntent(context))
+        } catch (_: Exception) {
+            try {
+                context.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                })
+            } catch (_: Exception) {}
+        }
+    }
+
     fun hasUsageStatsPermission(context: Context): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
         if (appOps != null) {

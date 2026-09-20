@@ -5,15 +5,12 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <!-- The key/settings are restored only through Android's protected backup service. -->
+        <include domain="sharedpref" path="." />
+        <include domain="file" path="secure_vault_files" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <include domain="sharedpref" path="." />
+        <include domain="file" path="secure_vault_files" />
     </device-transfer>
-    -->
 </data-extraction-rules>

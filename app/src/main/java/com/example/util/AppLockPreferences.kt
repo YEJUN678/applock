@@ -15,6 +15,9 @@ object AppLockPreferences {
     private const val KEY_GRID_SIZE = "grid_size"
     private const val KEY_PATTERN = "saved_pattern"
     private const val KEY_PIN = "saved_pin"
+    private const val KEY_PASSWORD = "saved_password"
+    private const val KEY_CALCULATOR_CODE = "saved_calculator_code"
+    private const val KEY_KNOCK_CODE = "saved_knock_code"
     private const val KEY_BIOMETRIC = "biometric_enabled"
     private const val KEY_THEME = "background_theme"
     private const val KEY_TIMEOUT = "lock_timeout_seconds"
@@ -24,6 +27,10 @@ object AppLockPreferences {
     private const val KEY_APP_SELF_PROTECT = "app_self_protect"
     private const val KEY_INTRUDER_SELFIE_ENABLED = "intruder_selfie_enabled"
     private const val KEY_INTRUDER_SELFIE_THRESHOLD = "intruder_selfie_threshold"
+    private const val KEY_UNINSTALL_PROTECTION = "uninstall_protection_enabled"
+    private const val KEY_RANDOM_PIN_KEYPAD = "random_pin_keypad_enabled"
+    private const val KEY_INTRUDER_SIREN = "intruder_siren_enabled"
+    private const val KEY_PANIC_SHAKE = "panic_shake_enabled"
     private const val KEY_INTRUDER_LOGS = "intruder_logs"
 
     // In-memory cache for fast accessibility lookup
@@ -84,6 +91,42 @@ object AppLockPreferences {
     }
 
     @Synchronized
+    fun lockPackagesBatch(context: Context, packageNames: Collection<String>) {
+        val current = getLockedPackages(context).toMutableSet()
+        current.addAll(packageNames)
+        cachedLockedPackages = current
+        getPrefs(context).edit().putStringSet(KEY_LOCKED_PACKAGES, current).apply()
+    }
+
+    @Synchronized
+    fun unlockPackagesBatch(context: Context, packageNames: Collection<String>) {
+        val current = getLockedPackages(context).toMutableSet()
+        current.removeAll(packageNames.toSet())
+        packageNames.forEach { temporarilyUnlockedMap.remove(it) }
+        cachedLockedPackages = current
+        getPrefs(context).edit().putStringSet(KEY_LOCKED_PACKAGES, current).apply()
+    }
+
+    @Synchronized
+    fun isUninstallProtectionEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_UNINSTALL_PROTECTION, false)
+    }
+
+    @Synchronized
+    fun setUninstallProtectionEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_UNINSTALL_PROTECTION, enabled).apply()
+        // If enabled, automatically protect package installer
+        if (enabled) {
+            val installers = listOf(
+                "com.google.android.packageinstaller",
+                "com.android.packageinstaller",
+                "com.samsung.android.packageinstaller"
+            )
+            lockPackagesBatch(context, installers)
+        }
+    }
+
+    @Synchronized
     fun isTemporarilyUnlocked(packageName: String): Boolean {
         val timestamp = temporarilyUnlockedMap[packageName] ?: return false
         val now = System.currentTimeMillis()
@@ -119,6 +162,11 @@ object AppLockPreferences {
         temporarilyUnlockedMap.remove(packageName)
     }
 
+    @Synchronized
+    fun resetAllTemporaryUnlocks() {
+        temporarilyUnlockedMap.clear()
+    }
+
     fun getLockConfig(context: Context): LockConfig {
         val prefs = getPrefs(context)
         val lockTypeName = prefs.getString(KEY_LOCK_TYPE, com.example.model.LockType.PATTERN.name)
@@ -135,6 +183,14 @@ object AppLockPreferences {
             listOf(0, 1, 2, 5, 8)
         }
         val pin = prefs.getString(KEY_PIN, "1234") ?: "1234"
+        val password = prefs.getString(KEY_PASSWORD, "admin1234") ?: "admin1234"
+        val calcCode = prefs.getString(KEY_CALCULATOR_CODE, "1234") ?: "1234"
+        val knockStr = prefs.getString(KEY_KNOCK_CODE, "1,2,3,4") ?: "1,2,3,4"
+        val knockCode = try {
+            knockStr.split(",").mapNotNull { it.trim().toIntOrNull() }.ifEmpty { listOf(1, 2, 3, 4) }
+        } catch (_: Exception) {
+            listOf(1, 2, 3, 4)
+        }
         val biometric = prefs.getBoolean(KEY_BIOMETRIC, true)
         val themeName = prefs.getString(KEY_THEME, BackgroundTheme.CYBER_WALLPAPER.name)
         val theme = try {
@@ -150,12 +206,19 @@ object AppLockPreferences {
         val appSelfProtect = prefs.getBoolean(KEY_APP_SELF_PROTECT, false)
         val intruderSelfie = prefs.getBoolean(KEY_INTRUDER_SELFIE_ENABLED, true)
         val intruderThreshold = prefs.getInt(KEY_INTRUDER_SELFIE_THRESHOLD, 1)
+        val uninstallProtection = prefs.getBoolean(KEY_UNINSTALL_PROTECTION, false)
+        val randomPin = prefs.getBoolean(KEY_RANDOM_PIN_KEYPAD, false)
+        val siren = prefs.getBoolean(KEY_INTRUDER_SIREN, false)
+        val panicShake = prefs.getBoolean(KEY_PANIC_SHAKE, false)
 
         return LockConfig(
             lockType = lockType,
             gridSize = gridSize,
             savedPattern = pattern.ifEmpty { listOf(0, 1, 2, 5, 8) },
             savedPin = pin.ifBlank { "1234" },
+            savedPassword = password.ifBlank { "admin1234" },
+            savedCalculatorCode = calcCode.ifBlank { "1234" },
+            savedKnockCode = knockCode,
             biometricEnabled = biometric,
             backgroundTheme = theme,
             lockTimeoutSeconds = timeoutSeconds,
@@ -164,18 +227,26 @@ object AppLockPreferences {
             isVibrationEnabled = vibration,
             isAppSelfProtectEnabled = appSelfProtect,
             isIntruderSelfieEnabled = intruderSelfie,
-            intruderSelfieThreshold = intruderThreshold
+            intruderSelfieThreshold = intruderThreshold,
+            isUninstallProtectionEnabled = uninstallProtection,
+            isRandomPinKeypad = randomPin,
+            isIntruderSirenEnabled = siren,
+            isPanicShakeEnabled = panicShake
         )
     }
 
     fun saveLockConfig(context: Context, config: LockConfig) {
         val patternStr = config.savedPattern.joinToString(",")
+        val knockStr = config.savedKnockCode.joinToString(",")
         cachedTimeoutMs = config.lockTimeoutSeconds * 1000L
         getPrefs(context).edit()
             .putString(KEY_LOCK_TYPE, config.lockType.name)
             .putInt(KEY_GRID_SIZE, config.gridSize)
             .putString(KEY_PATTERN, patternStr)
             .putString(KEY_PIN, config.savedPin)
+            .putString(KEY_PASSWORD, config.savedPassword)
+            .putString(KEY_CALCULATOR_CODE, config.savedCalculatorCode)
+            .putString(KEY_KNOCK_CODE, knockStr)
             .putBoolean(KEY_BIOMETRIC, config.biometricEnabled)
             .putString(KEY_THEME, config.backgroundTheme.name)
             .putInt(KEY_TIMEOUT, config.lockTimeoutSeconds)
@@ -185,7 +256,16 @@ object AppLockPreferences {
             .putBoolean(KEY_APP_SELF_PROTECT, config.isAppSelfProtectEnabled)
             .putBoolean(KEY_INTRUDER_SELFIE_ENABLED, config.isIntruderSelfieEnabled)
             .putInt(KEY_INTRUDER_SELFIE_THRESHOLD, config.intruderSelfieThreshold)
+            .putBoolean(KEY_UNINSTALL_PROTECTION, config.isUninstallProtectionEnabled)
+            .putBoolean(KEY_RANDOM_PIN_KEYPAD, config.isRandomPinKeypad)
+            .putBoolean(KEY_INTRUDER_SIREN, config.isIntruderSirenEnabled)
+            .putBoolean(KEY_PANIC_SHAKE, config.isPanicShakeEnabled)
             .apply()
+
+        // Also sync uninstall protection state
+        if (config.isUninstallProtectionEnabled) {
+            setUninstallProtectionEnabled(context, true)
+        }
     }
 
     fun getIntruderLogs(context: Context): List<IntruderLog> {

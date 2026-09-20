@@ -3,13 +3,21 @@ package com.example.service
 import android.app.Service
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.widget.Toast
 import com.example.LockActivity
 import com.example.util.AppLockPermissionHelper
 import com.example.util.AppLockPreferences
+import com.example.util.PanicShakeDetector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,10 +41,64 @@ class AppLockMonitoringService : Service() {
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
     private var lastForegroundPackage = ""
+    private var panicShakeDetector: PanicShakeDetector? = null
+
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                // Instant Lock on Screen Off: reset all temporary unlock sessions immediately
+                AppLockPreferences.resetAllTemporaryUnlocks()
+            }
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        try {
+            registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
+        } catch (_: Exception) {}
+        updateShakeDetector()
+    }
+
+    private fun updateShakeDetector() {
+        val config = AppLockPreferences.getLockConfig(applicationContext)
+        if (config.isPanicShakeEnabled) {
+            if (panicShakeDetector == null) {
+                panicShakeDetector = PanicShakeDetector(applicationContext) {
+                    // Triggered when shaken in ANY app across the entire system!
+                    AppLockPreferences.resetAllTemporaryUnlocks()
+
+                    // Emergency haptic vibration
+                    val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 80, 50, 80, 50, 150), -1))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator?.vibrate(250)
+                    }
+
+                    // Return to home screen immediately or launch lock screen
+                    val kicked = AppLockAccessibilityService.performGlobalHome()
+                    if (!kicked && lastForegroundPackage.isNotEmpty()) {
+                        LockActivity.start(applicationContext, lastForegroundPackage)
+                    }
+
+                    Handler(Looper.getMainLooper()).post {
+                        Toast.makeText(applicationContext, "🚨 긴급 안심 흔들기 감지: 모든 앱이 즉시 잠금 상태로 전환되었습니다!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                panicShakeDetector?.start()
+            }
+        } else {
+            panicShakeDetector?.stop()
+            panicShakeDetector = null
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        updateShakeDetector()
         startMonitoring()
         return START_STICKY
     }
@@ -51,7 +113,7 @@ class AppLockMonitoringService : Service() {
                         if (currentPackage.isNotEmpty() && currentPackage != applicationContext.packageName) {
                             // Ignore keyboard / IME popups
                             if (AppLockPermissionHelper.isInputMethodPackage(applicationContext, currentPackage)) {
-                                delay(300)
+                                delay(150)
                                 continue
                             }
 
@@ -65,7 +127,10 @@ class AppLockMonitoringService : Service() {
                             }
                             lastForegroundPackage = currentPackage
 
-                            if (AppLockPreferences.isPackageLocked(applicationContext, currentPackage)) {
+                            val isUninstallAttempt = AppLockPreferences.isUninstallProtectionEnabled(applicationContext) &&
+                                    (currentPackage.contains("packageinstaller") || currentPackage == "com.google.android.packageinstaller" || currentPackage == "com.android.packageinstaller")
+
+                            if (AppLockPreferences.isPackageLocked(applicationContext, currentPackage) || isUninstallAttempt) {
                                 if (!AppLockPreferences.isTemporarilyUnlocked(currentPackage)) {
                                     LockActivity.start(applicationContext, currentPackage)
                                 } else {
@@ -78,7 +143,7 @@ class AppLockMonitoringService : Service() {
                 } catch (_: Exception) {
                     // Safe guard
                 }
-                delay(300)
+                delay(150)
             }
         }
     }
@@ -102,5 +167,10 @@ class AppLockMonitoringService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         serviceJob.cancel()
+        panicShakeDetector?.stop()
+        panicShakeDetector = null
+        try {
+            unregisterReceiver(screenOffReceiver)
+        } catch (_: Exception) {}
     }
 }
