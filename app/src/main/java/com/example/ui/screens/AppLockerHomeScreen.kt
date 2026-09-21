@@ -799,6 +799,7 @@ fun AppLockerHomeScreen(
                             onClearLogs = onClearIntruderLogs,
                             onDeleteLog = onDeleteIntruderLog,
                             onCaptureTestSelfie = onCaptureTestSelfie,
+                            onDownloadIntruderPhoto = onDownloadIntruderPhoto,
                             onUpdateConfig = onLockConfigChanged
                         )
                     }
@@ -850,6 +851,7 @@ fun AppLockerHomeScreen(
                             },
                             onOpenVault = onOpenVault,
                             onTogglePrivacyFilter = onTogglePrivacyFilter,
+                            onConfigureDisguise = onConfigureDisguise,
                             onToggleRandomPin = {
                                 onLockConfigChanged(lockConfig.copy(isRandomPinKeypad = it))
                             },
@@ -990,6 +992,7 @@ fun SettingsView(
     onChangeIntruderSelfieThreshold: (Int) -> Unit = {},
     onOpenVault: () -> Unit = {},
     onTogglePrivacyFilter: () -> Unit = {},
+    onConfigureDisguise: () -> Unit = {},
     onToggleRandomPin: (Boolean) -> Unit = {},
     onToggleIntruderSiren: (Boolean) -> Unit = {},
     onTogglePanicShake: (Boolean) -> Unit = {}
@@ -2193,6 +2196,7 @@ fun IntruderSelfieVaultView(
     onClearLogs: () -> Unit,
     onDeleteLog: (String) -> Unit,
     onCaptureTestSelfie: () -> Unit,
+    onDownloadIntruderPhoto: (String) -> Unit = {},
     onUpdateConfig: (LockConfig) -> Unit
 ) {
     val context = LocalContext.current
