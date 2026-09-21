@@ -143,11 +143,13 @@ fun AppLockerHomeScreen(
     onBatchTimeout: (Int) -> Unit = {},
     onClearIntruderLogs: () -> Unit,
     onDeleteIntruderLog: (String) -> Unit = {},
+    onDownloadIntruderPhoto: (String) -> Unit = {},
     onCaptureTestSelfie: () -> Unit = {},
     onLockConfigChanged: (LockConfig) -> Unit,
     onTestLaunchApp: (AppItem) -> Unit,
     onOpenVault: () -> Unit = {},
     onTogglePrivacyFilter: () -> Unit = {},
+    onConfigureDisguise: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(1) } // 0: Locked, 1: Unlocked, 2: Intruder Selfie, 3: Settings
@@ -1310,6 +1312,7 @@ fun SettingsView(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("화면 가림막 켜기 / 끄기 토글", color = NeonAmber, fontWeight = FontWeight.Bold)
                     }
+                    OutlinedButton(onClick = onConfigureDisguise, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("위장 아이콘 설정", color = NeonAmber, fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -2688,6 +2691,14 @@ fun IntruderSelfieVaultView(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        OutlinedButton(
+                            onClick = { log.photoPath?.let(onDownloadIntruderPhoto) },
+                            enabled = log.photoPath != null,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("다운로드", fontSize = 12.sp) }
                         OutlinedButton(
                             onClick = {
                                 onDeleteLog(log.id)

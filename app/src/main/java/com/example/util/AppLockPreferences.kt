@@ -32,6 +32,7 @@ object AppLockPreferences {
     private const val KEY_INTRUDER_SIREN = "intruder_siren_enabled"
     private const val KEY_PANIC_SHAKE = "panic_shake_enabled"
     private const val KEY_INTRUDER_LOGS = "intruder_logs"
+    private const val KEY_PRIVACY_AUTO_PACKAGES = "privacy_auto_packages"
 
     // In-memory cache for fast accessibility lookup
     @Volatile
@@ -160,6 +161,15 @@ object AppLockPreferences {
     @Synchronized
     fun clearTemporarilyUnlocked(packageName: String) {
         temporarilyUnlockedMap.remove(packageName)
+    }
+
+    fun isPrivacyShadeAutoEnabled(context: Context, packageName: String): Boolean =
+        (getPrefs(context).getStringSet(KEY_PRIVACY_AUTO_PACKAGES, emptySet()) ?: emptySet()).contains(packageName)
+
+    fun setPrivacyShadeAutoEnabled(context: Context, packageName: String, enabled: Boolean) {
+        val packages = (getPrefs(context).getStringSet(KEY_PRIVACY_AUTO_PACKAGES, emptySet()) ?: emptySet()).toMutableSet()
+        if (enabled) packages.add(packageName) else packages.remove(packageName)
+        getPrefs(context).edit().putStringSet(KEY_PRIVACY_AUTO_PACKAGES, packages).apply()
     }
 
     @Synchronized

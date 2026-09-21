@@ -3,6 +3,12 @@ package com.example
 import android.os.Bundle
 import android.view.WindowManager
 import android.widget.Toast
+import android.app.AlertDialog
+import android.content.ComponentName
+import android.content.pm.PackageManager
+import android.text.InputType
+import android.widget.EditText
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -37,10 +43,37 @@ import com.example.util.AppLockPermissionHelper
 import com.example.util.AppLockPreferences
 import com.example.util.InstalledAppsManager
 import com.example.util.IntruderCameraHelper
+import com.example.util.EncryptedBackupManager
+import com.example.util.IntruderPhotoExporter
 import com.example.util.PanicShakeDetector
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
+    fun showLauncherDisguiseChooser() {
+        val options = arrayOf("기본 App Lock", "계산기", "메모장")
+        AlertDialog.Builder(this).setTitle("위장 아이콘").setItems(options) { _, choice ->
+            val pm = packageManager
+            val main = ComponentName(this, MainActivity::class.java)
+            val calculator = ComponentName(this, "${packageName}.CalculatorAlias")
+            val notes = ComponentName(this, "${packageName}.NotesAlias")
+            listOf(calculator, notes).forEach { pm.setComponentEnabledSetting(it, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP) }
+            val selected = listOf(main, calculator, notes)[choice]
+            pm.setComponentEnabledSetting(selected, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+            Toast.makeText(this, "위장 아이콘을 적용했습니다. 홈 화면에 반영되기까지 잠시 걸릴 수 있습니다.", Toast.LENGTH_LONG).show()
+        }.show()
+    }
+    private var pendingBackupPassword: CharArray? = null
+    private var pendingRestoreUri: android.net.Uri? = null
+    private val createBackupFile = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val password = pendingBackupPassword
+        if (uri != null && password != null) runCatching { EncryptedBackupManager.export(this, uri, password) }
+            .onSuccess { Toast.makeText(this, "암호화 백업을 저장했습니다.", Toast.LENGTH_LONG).show() }
+            .onFailure { Toast.makeText(this, "백업 실패: ${it.message}", Toast.LENGTH_LONG).show() }
+        pendingBackupPassword = null
+    }
+    private val selectBackupFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) { pendingRestoreUri = uri; askBackupPassword("백업 복원", false) }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Do not expose vault, lock settings, or intruder logs through screenshots,
@@ -56,6 +89,27 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
+        if (!getSharedPreferences("backup_ui", MODE_PRIVATE).getBoolean("tutorial_seen", false)) showBackupTutorial()
+    }
+
+    private fun showBackupTutorial() = AlertDialog.Builder(this)
+        .setTitle("재설치 백업 · 복원")
+        .setMessage("백업 비밀번호로 암호화해 Google Drive 등 원하는 위치에 저장할 수 있습니다. 새 설치에서는 이 파일을 선택해 복원하거나 건너뛸 수 있습니다.")
+        .setPositiveButton("백업 내보내기") { _, _ -> askBackupPassword("백업 비밀번호 설정", true) }
+        .setNeutralButton("백업 복원") { _, _ -> selectBackupFile.launch(arrayOf("application/octet-stream", "*/*")) }
+        .setNegativeButton("건너뛰기") { _, _ -> getSharedPreferences("backup_ui", MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply() }
+        .show()
+
+    private fun askBackupPassword(title: String, exporting: Boolean) {
+        val field = EditText(this).apply { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; hint = "6자 이상 백업 비밀번호" }
+        AlertDialog.Builder(this).setTitle(title).setView(field)
+            .setPositiveButton(if (exporting) "계속" else "복원") { _, _ ->
+                val password = field.text.toString().toCharArray()
+                if (exporting) { pendingBackupPassword = password; createBackupFile.launch("AppLockBackup-${System.currentTimeMillis()}.albk") }
+                else { val uri = pendingRestoreUri; if (uri != null) runCatching { EncryptedBackupManager.restore(this, uri, password) }
+                    .onSuccess { getSharedPreferences("backup_ui", MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply(); recreate() }
+                    .onFailure { Toast.makeText(this, "복원 실패: 비밀번호 또는 파일을 확인하세요.", Toast.LENGTH_LONG).show() } }
+            }.setNegativeButton("취소", null).show()
     }
 }
 
@@ -294,6 +348,10 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                     intruderLogs = AppLockPreferences.getIntruderLogs(context)
                     onShowToast("해당 침입자 기록이 삭제되었습니다.")
                 },
+                onDownloadIntruderPhoto = { path ->
+                    if (IntruderPhotoExporter.exportToDownloads(context, path)) onShowToast("침입자 사진을 Downloads/AppLock Intruder에 저장했습니다.")
+                    else onShowToast("사진을 저장하지 못했습니다.")
+                },
                 onCaptureTestSelfie = {
                     IntruderCameraHelper.captureIntruderSelfie(
                         context = context,
@@ -343,7 +401,8 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                             onShowToast("🛡️ 엿보기 방지 가림막이 시작되었습니다! (모든 앱 위에 표시)")
                         }
                     }
-                }
+                },
+                onConfigureDisguise = { (context as? MainActivity)?.showLauncherDisguiseChooser() }
             )
         }
 

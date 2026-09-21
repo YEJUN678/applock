@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,11 +33,15 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AppItem
@@ -45,6 +50,7 @@ import com.example.ui.theme.CyberCardDark
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.util.AppLockPreferences
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -57,6 +63,8 @@ fun AppItemCard(
     onTestLaunch: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var autoPrivacy by remember(app.packageName) { mutableStateOf(AppLockPreferences.isPrivacyShadeAutoEnabled(context, app.packageName)) }
     val borderColor = when {
         isSelected -> NeonCyan
         app.isLocked -> NeonCyan.copy(alpha = 0.4f)
@@ -178,6 +186,12 @@ fun AppItemCard(
             // In normal mode: Test launch button + Lock switch
             if (!isSelectionMode) {
                 if (app.isLocked) {
+                    IconButton(
+                        onClick = { autoPrivacy = !autoPrivacy; AppLockPreferences.setPrivacyShadeAutoEnabled(context, app.packageName, autoPrivacy) },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Default.VisibilityOff, "잠금 해제 후 사생활 필름 자동 실행", tint = if (autoPrivacy) NeonCyan else TextSecondary)
+                    }
                     IconButton(
                         onClick = onTestLaunch,
                         modifier = Modifier.size(36.dp)

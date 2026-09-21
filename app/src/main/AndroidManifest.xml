@@ -49,6 +49,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".DisguisedEntryActivity" android:exported="false" />
+        <activity-alias android:name=".CalculatorAlias" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher" android:label="계산기" android:targetActivity=".DisguisedEntryActivity"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>
+        <activity-alias android:name=".NotesAlias" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_round" android:label="메모" android:targetActivity=".DisguisedEntryActivity"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>
 
         <!-- Dedicated Lock Screen Activity that intercepts and blocks unauthorized access -->
         <activity

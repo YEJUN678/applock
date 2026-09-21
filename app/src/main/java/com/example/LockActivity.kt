@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import com.example.service.AppLockAccessibilityService
+import com.example.service.PrivacyShadeOverlayService
 import com.example.ui.screens.LockOverlayScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.util.AppLockPreferences
@@ -57,6 +58,17 @@ class LockActivity : FragmentActivity() {
     private var appName by mutableStateOf("보호된 앱")
     private var appIcon by mutableStateOf<Drawable?>(null)
 
+    private fun completeUnlock() {
+        if (targetPackage.isNotEmpty()) {
+            AppLockPreferences.setTemporarilyUnlocked(targetPackage)
+            if (AppLockPreferences.isPrivacyShadeAutoEnabled(this, targetPackage)) {
+                PrivacyShadeOverlayService.start(this)
+            }
+            if (targetPackage != packageName) InstalledAppsManager.launchApp(this, targetPackage)
+        }
+        finish()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // The authentication screen must never appear in captures or the recents thumbnail.
@@ -83,14 +95,8 @@ class LockActivity : FragmentActivity() {
                         requestBiometricUnlock(
                             appName = appName,
                             onSuccess = {
-                                if (targetPackage.isNotEmpty()) {
-                                    AppLockPreferences.setTemporarilyUnlocked(targetPackage)
-                                    if (targetPackage != packageName) {
-                                        InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
-                                    }
-                                }
+                                completeUnlock()
                                 Toast.makeText(this@LockActivity, "생체 인증 성공!", Toast.LENGTH_SHORT).show()
-                                finish()
                             },
                             onFailed = {
                                 recordFailedIntruderAttempt(
@@ -124,14 +130,8 @@ class LockActivity : FragmentActivity() {
                         requestBiometricUnlock(
                             appName = appName,
                             onSuccess = {
-                                if (targetPackage.isNotEmpty()) {
-                                    AppLockPreferences.setTemporarilyUnlocked(targetPackage)
-                                    if (targetPackage != packageName) {
-                                        InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
-                                    }
-                                }
+                                completeUnlock()
                                 Toast.makeText(this@LockActivity, "생체 인증 성공!", Toast.LENGTH_SHORT).show()
-                                finish()
                             },
                             onFailed = {
                                 recordFailedIntruderAttempt(
@@ -143,14 +143,8 @@ class LockActivity : FragmentActivity() {
                         )
                     },
                     onUnlockSuccess = {
-                        if (targetPackage.isNotEmpty()) {
-                            AppLockPreferences.setTemporarilyUnlocked(targetPackage)
-                            if (targetPackage != packageName) {
-                                InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
-                            }
-                        }
+                        completeUnlock()
                         Toast.makeText(this@LockActivity, "인증 성공!", Toast.LENGTH_SHORT).show()
-                        finish()
                     },
                     onFailedAttempt = { attempts ->
                         recordFailedIntruderAttempt(
