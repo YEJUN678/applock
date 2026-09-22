@@ -6,6 +6,7 @@ import android.widget.Toast
 import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.pm.PackageManager
+import android.provider.Settings
 import android.text.InputType
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,15 +50,29 @@ import com.example.util.PanicShakeDetector
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
+    fun showDuressPinSetup() {
+        val field = EditText(this).apply { inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "일반 PIN과 다른 4자리 PIN" }
+        AlertDialog.Builder(this).setTitle("듀레스 PIN 설정").setMessage("입력하면 사생활 필름·침입 기록·즉시 재잠금이 실행됩니다.").setView(field)
+            .setPositiveButton("저장") { _, _ ->
+                val pin = field.text.toString()
+                if (pin.length == 4 && pin != AppLockPreferences.getLockConfig(this).savedPin) { AppLockPreferences.setDuressPin(this, pin); Toast.makeText(this, "듀레스 PIN을 저장했습니다.", Toast.LENGTH_SHORT).show() }
+                else Toast.makeText(this, "일반 PIN과 다른 4자리 숫자를 입력하세요.", Toast.LENGTH_LONG).show()
+            }.setNegativeButton("취소", null).show()
+    }
+    fun setNotificationPrivacy(enabled: Boolean) {
+        val updated = AppLockPreferences.getLockConfig(this).copy(isNotificationPrivacyEnabled = enabled)
+        AppLockPreferences.saveLockConfig(this, updated)
+        if (enabled) startActivity(android.content.Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+    }
     fun showLauncherDisguiseChooser() {
         val options = arrayOf("기본 App Lock", "계산기", "메모장")
         AlertDialog.Builder(this).setTitle("위장 아이콘").setItems(options) { _, choice ->
             val pm = packageManager
-            val main = ComponentName(this, MainActivity::class.java)
+            val default = ComponentName(this, "${packageName}.DefaultAlias")
             val calculator = ComponentName(this, "${packageName}.CalculatorAlias")
             val notes = ComponentName(this, "${packageName}.NotesAlias")
-            listOf(calculator, notes).forEach { pm.setComponentEnabledSetting(it, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP) }
-            val selected = listOf(main, calculator, notes)[choice]
+            listOf(default, calculator, notes).forEach { pm.setComponentEnabledSetting(it, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP) }
+            val selected = listOf(default, calculator, notes)[choice]
             pm.setComponentEnabledSetting(selected, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
             Toast.makeText(this, "위장 아이콘을 적용했습니다. 홈 화면에 반영되기까지 잠시 걸릴 수 있습니다.", Toast.LENGTH_LONG).show()
         }.show()
@@ -98,6 +113,14 @@ class MainActivity : FragmentActivity() {
         .setPositiveButton("백업 내보내기") { _, _ -> askBackupPassword("백업 비밀번호 설정", true) }
         .setNeutralButton("백업 복원") { _, _ -> selectBackupFile.launch(arrayOf("application/octet-stream", "*/*")) }
         .setNegativeButton("건너뛰기") { _, _ -> getSharedPreferences("backup_ui", MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply() }
+        .show()
+
+    fun showBackupActions() = AlertDialog.Builder(this)
+        .setTitle("재설치 백업 · 복원")
+        .setMessage("백업 파일은 비밀번호로 암호화됩니다. Google Drive를 선택해 안전하게 보관하세요.")
+        .setPositiveButton("백업 내보내기") { _, _ -> askBackupPassword("백업 비밀번호 설정", true) }
+        .setNeutralButton("백업 복원") { _, _ -> selectBackupFile.launch(arrayOf("application/octet-stream", "*/*")) }
+        .setNegativeButton("취소", null)
         .show()
 
     private fun askBackupPassword(title: String, exporting: Boolean) {
@@ -239,6 +262,7 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                 hasUsageStatsPermission = hasUsageStatsPermission,
                 lockConfig = lockConfig,
                 intruderLogs = intruderLogs,
+                isDuressMode = AppLockPreferences.isDuressSession(context),
                 onRequestOverlayPermission = {
                     val intent = AppLockPermissionHelper.getOverlayPermissionIntent(context)
                     try {
@@ -402,7 +426,10 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                         }
                     }
                 },
-                onConfigureDisguise = { (context as? MainActivity)?.showLauncherDisguiseChooser() }
+                onConfigureDisguise = { (context as? MainActivity)?.showLauncherDisguiseChooser() },
+                onManageBackup = { (context as? MainActivity)?.showBackupActions() },
+                onConfigureDuressPin = { (context as? MainActivity)?.showDuressPinSetup() },
+                onToggleNotificationPrivacy = { enabled -> (context as? MainActivity)?.setNotificationPrivacy(enabled) }
             )
         }
 

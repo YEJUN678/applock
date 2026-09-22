@@ -150,6 +150,10 @@ fun AppLockerHomeScreen(
     onOpenVault: () -> Unit = {},
     onTogglePrivacyFilter: () -> Unit = {},
     onConfigureDisguise: () -> Unit = {},
+    onManageBackup: () -> Unit = {},
+    onConfigureDuressPin: () -> Unit = {},
+    onToggleNotificationPrivacy: (Boolean) -> Unit = {},
+    isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(1) } // 0: Locked, 1: Unlocked, 2: Intruder Selfie, 3: Settings
@@ -241,7 +245,7 @@ fun AppLockerHomeScreen(
                         }
 
                         // 3. Theme icon at top
-                        IconButton(
+                        if (!isDuressMode) IconButton(
                             onClick = { showThemeSheet = true },
                             modifier = Modifier.size(38.dp)
                         ) {
@@ -253,7 +257,7 @@ fun AppLockerHomeScreen(
                         }
 
                         // 4. Settings icon at top
-                        IconButton(
+                        if (!isDuressMode) IconButton(
                             onClick = { selectedTab = 3 },
                             modifier = Modifier.size(38.dp)
                         ) {
@@ -483,7 +487,7 @@ fun AppLockerHomeScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            FilterChip(
+            if (!isDuressMode) FilterChip(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
                 label = { Text("잠김 (${lockedApps.size})", fontSize = 11.sp) },
@@ -507,7 +511,7 @@ fun AppLockerHomeScreen(
                 modifier = Modifier.weight(1.1f)
             )
 
-            FilterChip(
+            if (!isDuressMode) FilterChip(
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
                 label = { Text("침입자 셀카 📸 (${intruderLogs.size})", fontSize = 11.sp) },
@@ -519,7 +523,7 @@ fun AppLockerHomeScreen(
                 modifier = Modifier.weight(1.35f)
             )
 
-            FilterChip(
+            if (!isDuressMode) FilterChip(
                 selected = selectedTab == 3,
                 onClick = { selectedTab = 3 },
                 label = { Text("설정 & 기능", fontSize = 11.sp) },
@@ -792,7 +796,7 @@ fun AppLockerHomeScreen(
                             }
                         }
                     }
-                    2 -> {
+                    2 -> if (!isDuressMode) {
                         IntruderSelfieVaultView(
                             logs = intruderLogs,
                             lockConfig = lockConfig,
@@ -803,7 +807,7 @@ fun AppLockerHomeScreen(
                             onUpdateConfig = onLockConfigChanged
                         )
                     }
-                    3 -> {
+                    3 -> if (!isDuressMode) {
                         SettingsView(
                             lockConfig = lockConfig,
                             hasOverlayPermission = hasOverlayPermission,
@@ -852,6 +856,9 @@ fun AppLockerHomeScreen(
                             onOpenVault = onOpenVault,
                             onTogglePrivacyFilter = onTogglePrivacyFilter,
                             onConfigureDisguise = onConfigureDisguise,
+                            onManageBackup = onManageBackup,
+                            onConfigureDuressPin = onConfigureDuressPin,
+                            onToggleNotificationPrivacy = onToggleNotificationPrivacy,
                             onToggleRandomPin = {
                                 onLockConfigChanged(lockConfig.copy(isRandomPinKeypad = it))
                             },
@@ -993,6 +1000,9 @@ fun SettingsView(
     onOpenVault: () -> Unit = {},
     onTogglePrivacyFilter: () -> Unit = {},
     onConfigureDisguise: () -> Unit = {},
+    onManageBackup: () -> Unit = {},
+    onConfigureDuressPin: () -> Unit = {},
+    onToggleNotificationPrivacy: (Boolean) -> Unit = {},
     onToggleRandomPin: (Boolean) -> Unit = {},
     onToggleIntruderSiren: (Boolean) -> Unit = {},
     onTogglePanicShake: (Boolean) -> Unit = {}
@@ -1316,6 +1326,8 @@ fun SettingsView(
                         Text("화면 가림막 켜기 / 끄기 토글", color = NeonAmber, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(onClick = onConfigureDisguise, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("위장 아이콘 설정", color = NeonAmber, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onManageBackup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("재설치 백업 · 복원", color = NeonCyan, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = { onToggleNotificationPrivacy(!lockConfig.isNotificationPrivacyEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple), modifier = Modifier.fillMaxWidth()) { Text(if (lockConfig.isNotificationPrivacyEnabled) "잠긴 앱 알림 숨김: 켜짐" else "잠긴 앱 알림 숨김 켜기", color = NeonPurple, fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -1864,6 +1876,9 @@ fun SettingsView(
                                 Icon(imageVector = Icons.Default.Dialpad, contentDescription = null, tint = NeonCyan)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("새 4자리 PIN 비밀번호 등록/변경", color = NeonCyan, fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(onClick = onConfigureDuressPin, border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                                Text("듀레스 PIN 설정 (긴급 보호)", color = NeonRed, fontWeight = FontWeight.Bold)
                             }
                         }
                         LockType.PASSWORD -> {

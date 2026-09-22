@@ -42,16 +42,11 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.MyApplication">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:theme="@style/Theme.MyApplication" />
         <activity android:name=".DisguisedEntryActivity" android:exported="false" />
-        <activity-alias android:name=".CalculatorAlias" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher" android:label="계산기" android:targetActivity=".DisguisedEntryActivity"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>
-        <activity-alias android:name=".NotesAlias" android:enabled="false" android:exported="true" android:icon="@mipmap/ic_launcher_round" android:label="메모" android:targetActivity=".DisguisedEntryActivity"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>
+        <activity-alias android:name=".DefaultAlias" android:enabled="true" android:exported="true" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:targetActivity=".DisguisedEntryActivity"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>
+        <activity-alias android:name=".CalculatorAlias" android:enabled="false" android:exported="true" android:icon="@drawable/ic_disguise_calculator" android:label="계산기" android:targetActivity=".DisguisedEntryActivity"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>
+        <activity-alias android:name=".NotesAlias" android:enabled="false" android:exported="true" android:icon="@drawable/ic_disguise_notes" android:label="메모" android:targetActivity=".DisguisedEntryActivity"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>
 
         <!-- Dedicated Lock Screen Activity that intercepts and blocks unauthorized access -->
         <activity
@@ -125,6 +120,16 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".service.LockedAppNotificationListener"
+            android:label="잠긴 앱 알림 보호"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
     </application>

@@ -18,8 +18,9 @@ import javax.crypto.spec.SecretKeySpec
 
 /** Password-encrypted, user-exported backup that remains usable after an uninstall. */
 object EncryptedBackupManager {
-    private const val MAGIC = "ALBK1"
+    private const val MAGIC = "ALBK2"
     private const val PREFS = "app_lock_prefs"
+    private const val VAULT_KEY_PREFS = "applock_vault_crypto_pref"
     private const val ITERATIONS = 210_000
 
     fun export(context: Context, destination: Uri, password: CharArray) {
@@ -31,7 +32,8 @@ object EncryptedBackupManager {
             val header = DataOutputStream(raw)
             header.writeUTF(MAGIC); header.write(salt); header.write(iv); header.flush()
             DataOutputStream(CipherOutputStream(raw, cipher(Cipher.ENCRYPT_MODE, key, iv))).use { out ->
-                out.writeUTF(preferencesJson(context).toString())
+                out.writeUTF(preferencesJson(context, PREFS).toString())
+                out.writeUTF(preferencesJson(context, VAULT_KEY_PREFS).toString())
                 val files = backupFiles(context)
                 out.writeInt(files.size)
                 files.forEach { (kind, file) ->
@@ -49,7 +51,8 @@ object EncryptedBackupManager {
             val salt = ByteArray(16).also { header.readFully(it) }
             val iv = ByteArray(12).also { header.readFully(it) }
             DataInputStream(CipherInputStream(raw, cipher(Cipher.DECRYPT_MODE, key(password, salt), iv))).use { input ->
-                restorePreferences(context, JSONObject(input.readUTF()))
+                restorePreferences(context, PREFS, JSONObject(input.readUTF()))
+                restorePreferences(context, VAULT_KEY_PREFS, JSONObject(input.readUTF()))
                 repeat(input.readInt()) {
                     val kind = input.readUTF(); val name = input.readUTF(); val size = input.readLong()
                     require(name == File(name).name) { "잘못된 백업 파일 이름입니다." }
@@ -62,6 +65,7 @@ object EncryptedBackupManager {
             }
         } ?: error("백업 파일을 열 수 없습니다.")
         AppLockPreferences.resetAllTemporaryUnlocks()
+        AppLockPreferences.invalidateCachedState()
     }
 
     private fun key(password: CharArray, salt: ByteArray) = SecretKeySpec(
@@ -69,13 +73,13 @@ object EncryptedBackupManager {
     )
     private fun cipher(mode: Int, key: SecretKeySpec, iv: ByteArray) = Cipher.getInstance("AES/GCM/NoPadding").apply { init(mode, key, GCMParameterSpec(128, iv)) }
     private fun backupFiles(context: Context): List<Pair<String, File>> = listOf("vault" to File(context.filesDir, "secure_vault_files"), "photo" to File(context.filesDir, "intruder_photos")).flatMap { (kind, dir) -> dir.listFiles()?.filter { it.isFile }?.map { kind to it } ?: emptyList() }
-    private fun preferencesJson(context: Context): JSONObject = JSONObject().also { root ->
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).all.forEach { (k, v) -> when (v) {
+    private fun preferencesJson(context: Context, prefsName: String): JSONObject = JSONObject().also { root ->
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE).all.forEach { (k, v) -> when (v) {
             is String -> root.put(k, JSONObject().put("s", v)); is Int -> root.put(k, JSONObject().put("i", v)); is Long -> root.put(k, JSONObject().put("l", v)); is Boolean -> root.put(k, JSONObject().put("b", v)); is Set<*> -> root.put(k, JSONObject().put("set", JSONArray(v.filterIsInstance<String>())) )
         } }
     }
-    private fun restorePreferences(context: Context, json: JSONObject) {
-        val edit = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear()
+    private fun restorePreferences(context: Context, prefsName: String, json: JSONObject) {
+        val edit = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE).edit().clear()
         json.keys().forEach { k -> val v = json.getJSONObject(k); when { v.has("s") -> edit.putString(k, v.getString("s")); v.has("i") -> edit.putInt(k, v.getInt("i")); v.has("l") -> edit.putLong(k, v.getLong("l")); v.has("b") -> edit.putBoolean(k, v.getBoolean("b")); v.has("set") -> edit.putStringSet(k, (0 until v.getJSONArray("set").length()).map { v.getJSONArray("set").getString(it) }.toSet()) } }
         edit.commit()
     }

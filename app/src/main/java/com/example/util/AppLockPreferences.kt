@@ -31,6 +31,9 @@ object AppLockPreferences {
     private const val KEY_RANDOM_PIN_KEYPAD = "random_pin_keypad_enabled"
     private const val KEY_INTRUDER_SIREN = "intruder_siren_enabled"
     private const val KEY_PANIC_SHAKE = "panic_shake_enabled"
+    private const val KEY_DURESS_PIN = "duress_pin"
+    private const val KEY_NOTIFICATION_PRIVACY = "notification_privacy_enabled"
+    private const val KEY_DURESS_SESSION = "duress_session"
     private const val KEY_INTRUDER_LOGS = "intruder_logs"
     private const val KEY_PRIVACY_AUTO_PACKAGES = "privacy_auto_packages"
 
@@ -163,6 +166,11 @@ object AppLockPreferences {
         temporarilyUnlockedMap.remove(packageName)
     }
 
+    fun getDuressPin(context: Context): String = getPrefs(context).getString(KEY_DURESS_PIN, "") ?: ""
+    fun setDuressPin(context: Context, pin: String) = getPrefs(context).edit().putString(KEY_DURESS_PIN, pin).apply()
+    fun isDuressSession(context: Context): Boolean = getPrefs(context).getBoolean(KEY_DURESS_SESSION, false)
+    fun setDuressSession(context: Context, active: Boolean) = getPrefs(context).edit().putBoolean(KEY_DURESS_SESSION, active).apply()
+
     fun isPrivacyShadeAutoEnabled(context: Context, packageName: String): Boolean =
         (getPrefs(context).getStringSet(KEY_PRIVACY_AUTO_PACKAGES, emptySet()) ?: emptySet()).contains(packageName)
 
@@ -174,6 +182,13 @@ object AppLockPreferences {
 
     @Synchronized
     fun resetAllTemporaryUnlocks() {
+        temporarilyUnlockedMap.clear()
+    }
+
+    /** Required after an encrypted backup restores SharedPreferences in the current process. */
+    @Synchronized
+    fun invalidateCachedState() {
+        cachedLockedPackages = null
         temporarilyUnlockedMap.clear()
     }
 
@@ -220,6 +235,7 @@ object AppLockPreferences {
         val randomPin = prefs.getBoolean(KEY_RANDOM_PIN_KEYPAD, false)
         val siren = prefs.getBoolean(KEY_INTRUDER_SIREN, false)
         val panicShake = prefs.getBoolean(KEY_PANIC_SHAKE, false)
+        val notificationPrivacy = prefs.getBoolean(KEY_NOTIFICATION_PRIVACY, false)
 
         return LockConfig(
             lockType = lockType,
@@ -241,7 +257,8 @@ object AppLockPreferences {
             isUninstallProtectionEnabled = uninstallProtection,
             isRandomPinKeypad = randomPin,
             isIntruderSirenEnabled = siren,
-            isPanicShakeEnabled = panicShake
+            isPanicShakeEnabled = panicShake,
+            isNotificationPrivacyEnabled = notificationPrivacy
         )
     }
 
@@ -270,6 +287,7 @@ object AppLockPreferences {
             .putBoolean(KEY_RANDOM_PIN_KEYPAD, config.isRandomPinKeypad)
             .putBoolean(KEY_INTRUDER_SIREN, config.isIntruderSirenEnabled)
             .putBoolean(KEY_PANIC_SHAKE, config.isPanicShakeEnabled)
+            .putBoolean(KEY_NOTIFICATION_PRIVACY, config.isNotificationPrivacyEnabled)
             .apply()
 
         // Also sync uninstall protection state

@@ -1,6 +1,8 @@
 package com.example.service
 
 import android.app.Service
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
@@ -14,6 +16,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
 import com.example.LockActivity
 import com.example.util.AppLockPermissionHelper
 import com.example.util.AppLockPreferences
@@ -31,7 +34,7 @@ class AppLockMonitoringService : Service() {
         fun startService(context: Context) {
             try {
                 val intent = Intent(context, AppLockMonitoringService::class.java)
-                context.startService(intent)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent)
             } catch (_: Exception) {
                 // Ignore if background restrictions apply
             }
@@ -54,10 +57,26 @@ class AppLockMonitoringService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        promoteToForeground()
         try {
             registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
         } catch (_: Exception) {}
         updateShakeDetector()
+    }
+
+    private fun promoteToForeground() {
+        val channelId = "app_lock_monitoring"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(
+                NotificationChannel(channelId, "앱 잠금 보호", NotificationManager.IMPORTANCE_MIN)
+            )
+        }
+        startForeground(3101, NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setContentTitle("앱 잠금 보호 작동 중")
+            .setContentText("잠긴 앱과 긴급 흔들기 기능을 감시합니다.")
+            .setOngoing(true)
+            .build())
     }
 
     private fun updateShakeDetector() {

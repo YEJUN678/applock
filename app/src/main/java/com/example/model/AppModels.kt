@@ -48,6 +48,7 @@ data class LockConfig(
     val isRandomPinKeypad: Boolean = false, // Shuffle PIN digits to prevent shoulder surfing
     val isIntruderSirenEnabled: Boolean = false, // Sound alert buzzer on intrusion attempts
     val isPanicShakeEnabled: Boolean = false, // Instantly lock all when phone is vigorously shaken
+    val isNotificationPrivacyEnabled: Boolean = false, // Hide notifications from locked apps
     val isScreenOffLockEnabled: Boolean = true, // Instant lock on screen off
     val isScheduleLockEnabled: Boolean = false, // Time schedule auto-lock
     val scheduleStartHour: Int = 9,
@@ -78,4 +79,3 @@ data class IntruderLog(
     val usedLockType: String = "패턴",
     val photoPath: String? = null
 )
-

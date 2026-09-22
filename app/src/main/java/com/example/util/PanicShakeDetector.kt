@@ -63,7 +63,7 @@ class PanicShakeDetector(
     }
 
     companion object {
-        private const val SHAKE_THRESHOLD_GRAVITY = 2.7f // Vigorous shake threshold
+        private const val SHAKE_THRESHOLD_GRAVITY = 3.2f // Requires a clearly intentional strong shake
         private const val SHAKE_COOLDOWN_MS = 1500L
     }
 }

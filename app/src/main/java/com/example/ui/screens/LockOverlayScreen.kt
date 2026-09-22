@@ -83,6 +83,7 @@ fun LockOverlayScreen(
     gridSize: Int,
     targetPattern: List<Int>,
     targetPin: String = "1234",
+    targetDuressPin: String = "",
     targetPassword: String = "admin1234",
     targetCalculatorCode: String = "1234",
     targetKnockCode: List<Int> = listOf(1, 2, 3, 4),
@@ -95,6 +96,7 @@ fun LockOverlayScreen(
     isIntruderSirenEnabled: Boolean = false,
     onRequestBiometric: (() -> Unit)? = null,
     onUnlockSuccess: () -> Unit,
+    onDuressUnlock: (() -> Unit)? = null,
     onFailedAttempt: ((Int) -> Unit)? = null,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -264,7 +266,9 @@ fun LockOverlayScreen(
                         isScrambleKeypad = isRandomPinKeypad,
                         isVibrationEnabled = isVibrationEnabled,
                         onPinCompleted = { enteredPin ->
-                            if (enteredPin == targetPin) {
+                            if (targetDuressPin.isNotBlank() && enteredPin == targetDuressPin) {
+                                onDuressUnlock?.invoke()
+                            } else if (enteredPin == targetPin) {
                                 onUnlockSuccess()
                             } else {
                                 isError = true

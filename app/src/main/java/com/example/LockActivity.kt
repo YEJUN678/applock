@@ -59,6 +59,7 @@ class LockActivity : FragmentActivity() {
     private var appIcon by mutableStateOf<Drawable?>(null)
 
     private fun completeUnlock() {
+        AppLockPreferences.setDuressSession(this, false)
         if (targetPackage.isNotEmpty()) {
             AppLockPreferences.setTemporarilyUnlocked(targetPackage)
             if (AppLockPreferences.isPrivacyShadeAutoEnabled(this, targetPackage)) {
@@ -116,6 +117,7 @@ class LockActivity : FragmentActivity() {
                     gridSize = lockConfig.gridSize,
                     targetPattern = lockConfig.savedPattern,
                     targetPin = lockConfig.savedPin,
+                    targetDuressPin = AppLockPreferences.getDuressPin(this@LockActivity),
                     targetPassword = lockConfig.savedPassword,
                     targetCalculatorCode = lockConfig.savedCalculatorCode,
                     targetKnockCode = lockConfig.savedKnockCode,
@@ -145,6 +147,15 @@ class LockActivity : FragmentActivity() {
                     onUnlockSuccess = {
                         completeUnlock()
                         Toast.makeText(this@LockActivity, "인증 성공!", Toast.LENGTH_SHORT).show()
+                    },
+                    onDuressUnlock = {
+                        AppLockPreferences.setDuressSession(this@LockActivity, true)
+                        AppLockPreferences.resetAllTemporaryUnlocks()
+                        if (targetPackage.isNotEmpty()) AppLockPreferences.setTemporarilyUnlocked(targetPackage)
+                        PrivacyShadeOverlayService.start(this@LockActivity)
+                        AppLockPreferences.recordIntruderAttempt(this@LockActivity, targetPackage, appName, 1, "듀레스 PIN")
+                        if (targetPackage.isNotEmpty() && targetPackage != packageName) InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
+                        finish()
                     },
                     onFailedAttempt = { attempts ->
                         recordFailedIntruderAttempt(
