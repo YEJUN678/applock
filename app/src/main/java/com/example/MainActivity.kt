@@ -167,6 +167,7 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
     var showVaultScreen by remember { mutableStateOf(false) }
     var isPrivacyFilterActive by remember { mutableStateOf(false) }
     var isDuressMode by remember { mutableStateOf(AppLockPreferences.isDuressSession(context)) }
+    var faceDownProtectionEnabled by remember { mutableStateOf(AppLockPreferences.isFaceDownProtectionEnabled(context)) }
 
     // Panic Shake Detector listener: immediately resets all temporary unlocks on vigorous shake
     DisposableEffect(lockConfig.isPanicShakeEnabled, lifecycleOwner) {
@@ -441,7 +442,14 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                 onConfigureDisguise = { (context as? MainActivity)?.showLauncherDisguiseChooser() },
                 onManageBackup = { (context as? MainActivity)?.showBackupActions() },
                 onConfigureDuressPin = { (context as? MainActivity)?.showDuressPinSetup() },
-                onToggleNotificationPrivacy = { enabled -> (context as? MainActivity)?.setNotificationPrivacy(enabled) }
+                onToggleNotificationPrivacy = { enabled -> (context as? MainActivity)?.setNotificationPrivacy(enabled) },
+                isFaceDownProtectionEnabled = faceDownProtectionEnabled,
+                onToggleFaceDownProtection = { enabled ->
+                    AppLockPreferences.setFaceDownProtectionEnabled(context, enabled)
+                    faceDownProtectionEnabled = enabled
+                    AppLockMonitoringService.startService(context)
+                    onShowToast(if (enabled) "뒤집기 보호가 켜졌습니다." else "뒤집기 보호가 꺼졌습니다.")
+                }
             )
         }
 

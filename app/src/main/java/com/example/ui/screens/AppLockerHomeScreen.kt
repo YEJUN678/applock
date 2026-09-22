@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -63,6 +64,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -153,6 +155,8 @@ fun AppLockerHomeScreen(
     onManageBackup: () -> Unit = {},
     onConfigureDuressPin: () -> Unit = {},
     onToggleNotificationPrivacy: (Boolean) -> Unit = {},
+    isFaceDownProtectionEnabled: Boolean = false,
+    onToggleFaceDownProtection: (Boolean) -> Unit = {},
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -167,6 +171,7 @@ fun AppLockerHomeScreen(
     var showBatchTimeoutDialog by remember { mutableStateOf(false) }
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedPackages by remember { mutableStateOf(setOf<String>()) }
+    var showMoreMenu by remember { mutableStateOf(false) }
 
     val filteredApps = remember(apps, searchQuery) {
         if (searchQuery.isBlank()) apps
@@ -215,69 +220,29 @@ fun AppLockerHomeScreen(
                         )
                     }
 
-                    // Top Icons: Vault, Privacy Shade, Theme, Settings, Refresh
+                    // Compact folder: non-essential areas are grouped under one menu.
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        // 1. Vault icon (AES-256 File Encrypt / Decrypt)
                         IconButton(
-                            onClick = onOpenVault,
+                            onClick = { showMoreMenu = true },
                             modifier = Modifier.size(38.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.EnhancedEncryption,
-                                contentDescription = "보안 파일 금고 (암호화/복호화)",
-                                tint = NeonGreen
-                            )
-                        }
-
-                        // 2. Privacy Shade filter
-                        IconButton(
-                            onClick = onTogglePrivacyFilter,
-                            modifier = Modifier.size(38.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.VisibilityOff,
-                                contentDescription = "엿보기 방지 셰이드",
-                                tint = NeonAmber
-                            )
-                        }
-
-                        // 3. Theme icon at top
-                        if (!isDuressMode) IconButton(
-                            onClick = { showThemeSheet = true },
-                            modifier = Modifier.size(38.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ColorLens,
-                                contentDescription = "테마 설정",
-                                tint = NeonPurple
-                            )
-                        }
-
-                        // 4. Settings icon at top
-                        if (!isDuressMode) IconButton(
-                            onClick = { selectedTab = 3 },
-                            modifier = Modifier.size(38.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "보안 설정",
-                                tint = if (selectedTab == 3) NeonCyan else TextSecondary
-                            )
-                        }
-
-                        // 5. Refresh icon
-                        IconButton(
-                            onClick = onRefreshApps,
-                            modifier = Modifier.size(38.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "앱 목록 새로고침",
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "더보기",
                                 tint = TextPrimary
                             )
+                        }
+                        DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
+                            Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                IconButton(onClick = { showMoreMenu = false; onOpenVault() }) { Icon(Icons.Default.EnhancedEncryption, "금고", tint = NeonGreen) }
+                                IconButton(onClick = { showMoreMenu = false; onTogglePrivacyFilter() }) { Icon(Icons.Default.VisibilityOff, "사생활 필름", tint = NeonAmber) }
+                                if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 2 }) { Icon(Icons.Default.PhotoCamera, "침입자 기록", tint = NeonRed) }
+                                if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 3 }) { Icon(Icons.Default.Settings, "설정 & 기능", tint = NeonCyan) }
+                                IconButton(onClick = { showMoreMenu = false; onRefreshApps() }) { Icon(Icons.Default.Refresh, "새로고침", tint = TextPrimary) }
+                            }
                         }
                     }
                 }
@@ -511,29 +476,6 @@ fun AppLockerHomeScreen(
                 modifier = Modifier.weight(1.1f)
             )
 
-            if (!isDuressMode) FilterChip(
-                selected = selectedTab == 2,
-                onClick = { selectedTab = 2 },
-                label = { Text("침입자 셀카 📸 (${intruderLogs.size})", fontSize = 11.sp) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = NeonRed,
-                    selectedLabelColor = Color.White
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.weight(1.35f)
-            )
-
-            if (!isDuressMode) FilterChip(
-                selected = selectedTab == 3,
-                onClick = { selectedTab = 3 },
-                label = { Text("설정 & 기능", fontSize = 11.sp) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = NeonPurple,
-                    selectedLabelColor = Color.White
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.weight(1f)
-            )
         }
 
         // Search Bar for apps (when in tab 0 or 1)
@@ -859,6 +801,8 @@ fun AppLockerHomeScreen(
                             onManageBackup = onManageBackup,
                             onConfigureDuressPin = onConfigureDuressPin,
                             onToggleNotificationPrivacy = onToggleNotificationPrivacy,
+                            isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
+                            onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
                                 onLockConfigChanged(lockConfig.copy(isRandomPinKeypad = it))
                             },
@@ -1003,6 +947,8 @@ fun SettingsView(
     onManageBackup: () -> Unit = {},
     onConfigureDuressPin: () -> Unit = {},
     onToggleNotificationPrivacy: (Boolean) -> Unit = {},
+    isFaceDownProtectionEnabled: Boolean = false,
+    onToggleFaceDownProtection: (Boolean) -> Unit = {},
     onToggleRandomPin: (Boolean) -> Unit = {},
     onToggleIntruderSiren: (Boolean) -> Unit = {},
     onTogglePanicShake: (Boolean) -> Unit = {}
@@ -1331,6 +1277,7 @@ fun SettingsView(
                     }
                     OutlinedButton(onClick = onManageBackup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("재설치 백업 · 복원", color = NeonCyan, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = { onToggleNotificationPrivacy(!lockConfig.isNotificationPrivacyEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple), modifier = Modifier.fillMaxWidth()) { Text(if (lockConfig.isNotificationPrivacyEnabled) "잠긴 앱 알림 숨김: 켜짐" else "잠긴 앱 알림 숨김 켜기", color = NeonPurple, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = { onToggleFaceDownProtection(!isFaceDownProtectionEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text(if (isFaceDownProtectionEnabled) "뒤집기 보호: 켜짐" else "뒤집으면 즉시 잠금 켜기", color = NeonAmber, fontWeight = FontWeight.Bold) }
                 }
             }
         }

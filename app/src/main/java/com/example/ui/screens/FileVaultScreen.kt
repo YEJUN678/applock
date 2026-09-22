@@ -86,12 +86,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
 import com.example.crypto.FileCryptoManager
+import com.example.crypto.VaultRecoveryPassword
 import com.example.model.EncryptedVaultFile
 import com.example.ui.theme.CyberBackground
 import com.example.ui.theme.CyberBorder
@@ -140,6 +142,9 @@ fun FileVaultScreen(
     var previewFile by remember { mutableStateOf<Pair<EncryptedVaultFile, String?>?>(null) }
     var fileToDelete by remember { mutableStateOf<EncryptedVaultFile?>(null) }
     var decryptedSuccessFile by remember { mutableStateOf<File?>(null) }
+    var showRecoveryPasswordDialog by remember { mutableStateOf(!VaultRecoveryPassword.isSet()) }
+    var recoveryPassword by remember { mutableStateOf("") }
+    var recoveryPasswordConfirm by remember { mutableStateOf("") }
 
     // Reload files from both drive public storage and internal vault
     fun reloadFiles() {
@@ -156,8 +161,32 @@ fun FileVaultScreen(
     }
 
     LaunchedEffect(Unit) {
-        FileCryptoManager.createSampleVaultFileIfEmpty(context)
+        if (VaultRecoveryPassword.isSet()) FileCryptoManager.createSampleVaultFileIfEmpty(context)
         reloadFiles()
+    }
+
+    if (showRecoveryPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("금고 복구 비밀번호") },
+            text = {
+                Column {
+                    Text("새 .vault 파일은 이 비밀번호로 암호화됩니다. 재설치·다른 기기에서도 같은 비밀번호로 복원할 수 있습니다. 비밀번호는 기기에 저장하지 않습니다.", color = TextSecondary)
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = recoveryPassword, onValueChange = { recoveryPassword = it }, label = { Text("복구 비밀번호 (8자 이상)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    OutlinedTextField(value = recoveryPasswordConfirm, onValueChange = { recoveryPasswordConfirm = it }, label = { Text("비밀번호 확인") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (recoveryPassword.length >= 8 && recoveryPassword == recoveryPasswordConfirm) {
+                        VaultRecoveryPassword.set(recoveryPassword.toCharArray())
+                        recoveryPassword = ""; recoveryPasswordConfirm = ""; showRecoveryPasswordDialog = false
+                        coroutineScope.launch { FileCryptoManager.createSampleVaultFileIfEmpty(context); reloadFiles() }
+                    }
+                }) { Text("금고 열기") }
+            }
+        )
     }
 
     // 1. Encrypt Real File: pick from Google Drive / storage -> creates .vault file in My Drive (Download/AppVault)

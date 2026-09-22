@@ -36,7 +36,7 @@ object FileCryptoManager {
     private const val VAULT_DIR_NAME = "secure_vault_files"
     private const val RESTORE_DIR_NAME = "Restored_Files"
     private const val MAGIC_HEADER = "APPV" // App Vault signature
-    private const val HEADER_VERSION = 1
+    private const val HEADER_VERSION = 2
     private const val BUFFER_SIZE = 64 * 1024 // 64 KB streaming buffer
 
     // App-bound master key seed stored in private internal prefs
@@ -73,6 +73,13 @@ object FileCryptoManager {
         val spec = PBEKeySpec(passPhrase, salt, 12000, 256)
         val tmp = factory.generateSecret(spec)
         return SecretKeySpec(tmp.encoded, "AES")
+    }
+
+    /** V2 vaults embed a fresh salt and derive their AES key from the user recovery password. */
+    private fun getRecoveryKey(password: CharArray, salt: ByteArray): SecretKey {
+        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        val spec = PBEKeySpec(password, salt, 210_000, 256)
+        return SecretKeySpec(factory.generateSecret(spec).encoded, "AES")
     }
 
     /**
@@ -120,7 +127,8 @@ object FileCryptoManager {
             val fileId = "vault_" + System.currentTimeMillis() + "_" + (1000..9999).random()
             val destEncryptedFile = File(vaultDir, "$fileId.locked")
 
-            val secretKey = getAppMasterKey(context)
+            val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
+            val secretKey = getRecoveryKey(VaultRecoveryPassword.require(), salt)
             val iv = ByteArray(16)
             SecureRandom().nextBytes(iv)
 
@@ -133,6 +141,7 @@ object FileCryptoManager {
                     // 1. Write Header
                     dataOut.write(MAGIC_HEADER.toByteArray(Charsets.US_ASCII)) // 4 bytes
                     dataOut.writeByte(HEADER_VERSION) // 1 byte
+                    dataOut.write(salt) // V2 portable recovery-key salt
                     dataOut.write(iv) // 16 bytes
                     dataOut.writeUTF(originalName) // UTF original name
                     dataOut.writeUTF(mimeType) // UTF mime
@@ -214,8 +223,6 @@ object FileCryptoManager {
                 count++
             }
 
-            val secretKey = getAppMasterKey(context)
-
             FileInputStream(encryptedFile).use { rawIn ->
                 val dataIn = DataInputStream(rawIn)
                 val magicBytes = ByteArray(4)
@@ -225,6 +232,10 @@ object FileCryptoManager {
                     return@withContext Result.failure(Exception("이 앱의 유효한 암호화 형식이 아닙니다."))
                 }
                 val version = dataIn.readByte().toInt()
+                val secretKey = if (version >= 2) {
+                    val salt = ByteArray(16); dataIn.readFully(salt)
+                    getRecoveryKey(VaultRecoveryPassword.require(), salt)
+                } else getAppMasterKey(context)
                 val iv = ByteArray(16)
                 dataIn.readFully(iv)
                 val origName = dataIn.readUTF()
@@ -277,6 +288,7 @@ object FileCryptoManager {
                     val magic = String(magicBytes, Charsets.US_ASCII)
                     if (magic == MAGIC_HEADER) {
                         val version = dataIn.readByte().toInt()
+                        if (version >= 2) dataIn.skipBytes(16)
                         val iv = ByteArray(16)
                         dataIn.readFully(iv)
                         val originalName = dataIn.readUTF()
@@ -411,7 +423,8 @@ object FileCryptoManager {
                 count++
             }
 
-            val secretKey = getAppMasterKey(context)
+            val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
+            val secretKey = getRecoveryKey(VaultRecoveryPassword.require(), salt)
             val iv = ByteArray(16)
             SecureRandom().nextBytes(iv)
 
@@ -424,6 +437,7 @@ object FileCryptoManager {
                     // 1. Write Header
                     dataOut.write(MAGIC_HEADER.toByteArray(Charsets.US_ASCII))
                     dataOut.writeByte(HEADER_VERSION)
+                    dataOut.write(salt)
                     dataOut.write(iv)
                     dataOut.writeUTF(originalName)
                     dataOut.writeUTF(mimeType)
@@ -486,8 +500,6 @@ object FileCryptoManager {
         onProgress: (Float) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
-            val secretKey = getAppMasterKey(context)
-
             context.contentResolver.openInputStream(vaultUri)?.use { rawIn ->
                 val dataIn = DataInputStream(rawIn)
                 val magicBytes = ByteArray(4)
@@ -497,6 +509,10 @@ object FileCryptoManager {
                     return@withContext Result.failure(Exception("이 앱에서 생성된 암호화 파일이 아니거나 형식이 일치하지 않습니다."))
                 }
                 val version = dataIn.readByte().toInt()
+                val secretKey = if (version >= 2) {
+                    val salt = ByteArray(16); dataIn.readFully(salt)
+                    getRecoveryKey(VaultRecoveryPassword.require(), salt)
+                } else getAppMasterKey(context)
                 val iv = ByteArray(16)
                 dataIn.readFully(iv)
                 val origName = dataIn.readUTF()
@@ -571,6 +587,7 @@ object FileCryptoManager {
                         val magic = String(magicBytes, Charsets.US_ASCII)
                         if (magic == MAGIC_HEADER) {
                             val version = dataIn.readByte().toInt()
+                            if (version >= 2) dataIn.skipBytes(16)
                             val iv = ByteArray(16)
                             dataIn.readFully(iv)
                             val originalName = dataIn.readUTF()

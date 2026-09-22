@@ -21,6 +21,8 @@ import com.example.LockActivity
 import com.example.util.AppLockPermissionHelper
 import com.example.util.AppLockPreferences
 import com.example.util.PanicShakeDetector
+import com.example.util.FaceDownDetector
+import com.example.service.PrivacyShadeOverlayService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,6 +47,7 @@ class AppLockMonitoringService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
     private var lastForegroundPackage = ""
     private var panicShakeDetector: PanicShakeDetector? = null
+    private var faceDownDetector: FaceDownDetector? = null
 
     private val screenOffReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -62,6 +65,19 @@ class AppLockMonitoringService : Service() {
             registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
         } catch (_: Exception) {}
         updateShakeDetector()
+        updateFaceDownDetector()
+    }
+
+    private fun updateFaceDownDetector() {
+        if (AppLockPreferences.isFaceDownProtectionEnabled(applicationContext)) {
+            if (faceDownDetector == null) {
+                faceDownDetector = FaceDownDetector(applicationContext) {
+                    AppLockPreferences.resetAllTemporaryUnlocks()
+                    PrivacyShadeOverlayService.start(applicationContext)
+                    if (lastForegroundPackage.isNotBlank()) LockActivity.start(applicationContext, lastForegroundPackage)
+                }.also { it.start() }
+            }
+        } else { faceDownDetector?.stop(); faceDownDetector = null }
     }
 
     private fun promoteToForeground() {
@@ -118,6 +134,7 @@ class AppLockMonitoringService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         updateShakeDetector()
+        updateFaceDownDetector()
         startMonitoring()
         return START_STICKY
     }
@@ -187,6 +204,7 @@ class AppLockMonitoringService : Service() {
         super.onDestroy()
         serviceJob.cancel()
         panicShakeDetector?.stop()
+        faceDownDetector?.stop()
         panicShakeDetector = null
         try {
             unregisterReceiver(screenOffReceiver)

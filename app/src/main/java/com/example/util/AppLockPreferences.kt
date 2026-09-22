@@ -34,6 +34,7 @@ object AppLockPreferences {
     private const val KEY_DURESS_PIN = "duress_pin"
     private const val KEY_NOTIFICATION_PRIVACY = "notification_privacy_enabled"
     private const val KEY_DURESS_SESSION = "duress_session"
+    private const val KEY_FACE_DOWN_PROTECTION = "face_down_protection"
     private const val KEY_INTRUDER_LOGS = "intruder_logs"
     private const val KEY_PRIVACY_AUTO_PACKAGES = "privacy_auto_packages"
 
@@ -170,6 +171,8 @@ object AppLockPreferences {
     fun setDuressPin(context: Context, pin: String) = getPrefs(context).edit().putString(KEY_DURESS_PIN, pin).apply()
     fun isDuressSession(context: Context): Boolean = getPrefs(context).getBoolean(KEY_DURESS_SESSION, false)
     fun setDuressSession(context: Context, active: Boolean) = getPrefs(context).edit().putBoolean(KEY_DURESS_SESSION, active).apply()
+    fun isFaceDownProtectionEnabled(context: Context): Boolean = getPrefs(context).getBoolean(KEY_FACE_DOWN_PROTECTION, false)
+    fun setFaceDownProtectionEnabled(context: Context, enabled: Boolean) = getPrefs(context).edit().putBoolean(KEY_FACE_DOWN_PROTECTION, enabled).apply()
 
     fun isPrivacyShadeAutoEnabled(context: Context, packageName: String): Boolean =
         (getPrefs(context).getStringSet(KEY_PRIVACY_AUTO_PACKAGES, emptySet()) ?: emptySet()).contains(packageName)
