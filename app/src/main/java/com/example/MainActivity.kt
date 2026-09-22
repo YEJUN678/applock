@@ -37,6 +37,7 @@ import com.example.model.IntruderLog
 import com.example.service.AppLockMonitoringService
 import com.example.service.PrivacyShadeOverlayService
 import com.example.ui.components.PrivacyScreenFilter
+import com.example.ui.components.CalculatorDisguiseLockView
 import com.example.ui.screens.AppLockerHomeScreen
 import com.example.ui.screens.FileVaultScreen
 import com.example.ui.theme.MyApplicationTheme
@@ -165,6 +166,7 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
 
     var showVaultScreen by remember { mutableStateOf(false) }
     var isPrivacyFilterActive by remember { mutableStateOf(false) }
+    var isDuressMode by remember { mutableStateOf(AppLockPreferences.isDuressSession(context)) }
 
     // Panic Shake Detector listener: immediately resets all temporary unlocks on vigorous shake
     DisposableEffect(lockConfig.isPanicShakeEnabled, lifecycleOwner) {
@@ -205,6 +207,7 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                 intruderLogs = AppLockPreferences.getIntruderLogs(context)
                 val currentConfig = AppLockPreferences.getLockConfig(context)
                 lockConfig = currentConfig
+                isDuressMode = AppLockPreferences.isDuressSession(context)
                 isPrivacyFilterActive = PrivacyShadeOverlayService.isRunning
 
                 // App Self Protection check: if enabled and not temporarily unlocked, show Lock Screen
@@ -248,7 +251,16 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
             .fillMaxSize()
             .safeDrawingPadding()
     ) {
-        if (showVaultScreen) {
+        if (isDuressMode) {
+            // A duress unlock deliberately exposes no lock list, vault, settings, or logs.
+            Box(modifier = Modifier.fillMaxSize()) {
+                CalculatorDisguiseLockView(
+                    targetCode = "__disabled__",
+                    onCodeSubmitted = {},
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        } else if (showVaultScreen) {
             BackHandler { showVaultScreen = false }
             FileVaultScreen(
                 onNavigateBack = { showVaultScreen = false }
@@ -262,7 +274,7 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                 hasUsageStatsPermission = hasUsageStatsPermission,
                 lockConfig = lockConfig,
                 intruderLogs = intruderLogs,
-                isDuressMode = AppLockPreferences.isDuressSession(context),
+                isDuressMode = false,
                 onRequestOverlayPermission = {
                     val intent = AppLockPermissionHelper.getOverlayPermissionIntent(context)
                     try {

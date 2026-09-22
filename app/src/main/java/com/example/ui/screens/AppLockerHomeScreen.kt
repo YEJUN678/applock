@@ -1326,6 +1326,9 @@ fun SettingsView(
                         Text("화면 가림막 켜기 / 끄기 토글", color = NeonAmber, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(onClick = onConfigureDisguise, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("위장 아이콘 설정", color = NeonAmber, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onConfigureDuressPin, enabled = lockConfig.lockType == LockType.PIN, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed), modifier = Modifier.fillMaxWidth()) {
+                        Text(if (lockConfig.lockType == LockType.PIN) "듀레스 PIN 설정 (긴급 보호)" else "듀레스 PIN: PIN 잠금 방식에서 사용 가능", color = NeonRed, fontWeight = FontWeight.Bold)
+                    }
                     OutlinedButton(onClick = onManageBackup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("재설치 백업 · 복원", color = NeonCyan, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = { onToggleNotificationPrivacy(!lockConfig.isNotificationPrivacyEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple), modifier = Modifier.fillMaxWidth()) { Text(if (lockConfig.isNotificationPrivacyEnabled) "잠긴 앱 알림 숨김: 켜짐" else "잠긴 앱 알림 숨김 켜기", color = NeonPurple, fontWeight = FontWeight.Bold) }
                 }
@@ -1876,9 +1879,6 @@ fun SettingsView(
                                 Icon(imageVector = Icons.Default.Dialpad, contentDescription = null, tint = NeonCyan)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("새 4자리 PIN 비밀번호 등록/변경", color = NeonCyan, fontWeight = FontWeight.Bold)
-                            }
-                            OutlinedButton(onClick = onConfigureDuressPin, border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                                Text("듀레스 PIN 설정 (긴급 보호)", color = NeonRed, fontWeight = FontWeight.Bold)
                             }
                         }
                         LockType.PASSWORD -> {
