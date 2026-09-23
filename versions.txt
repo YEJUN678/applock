@@ -1,6 +1,4 @@
-# Upload this file to the repository root on the main branch.
-# For each release, increment versionCode and point apkUrl to that release asset.
 versionCode=5
 versionName=5.0
-apkUrl=https//github.com/YEJUN678/applock/releases/download/applockbeta4/app-debug.apk
+apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta4/app-debug.apk
 notes=업데이트 UI 개선
