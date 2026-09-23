@@ -41,6 +41,7 @@ import com.example.service.AppLockMonitoringService
 import com.example.service.PrivacyShadeOverlayService
 import com.example.ui.components.PrivacyScreenFilter
 import com.example.ui.components.CalculatorDisguiseLockView
+import com.example.ui.components.UpdateInstallDialog
 import com.example.ui.screens.AppLockerHomeScreen
 import com.example.ui.screens.FileVaultScreen
 import com.example.ui.theme.MyApplicationTheme
@@ -59,6 +60,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 class MainActivity : FragmentActivity() {
+    private var availableUpdate by mutableStateOf<AppUpdate?>(null)
+    private var isUpdateDownloading by mutableStateOf(false)
+    private var downloadedUpdateUri by mutableStateOf<Uri?>(null)
     fun showDuressPinSetup() {
         val field = EditText(this).apply { inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "일반 PIN과 다른 4자리 PIN" }
         AlertDialog.Builder(this).setTitle("듀레스 PIN 설정").setMessage("입력하면 사생활 필름·침입 기록·즉시 재잠금이 실행됩니다.").setView(field)
@@ -111,6 +115,18 @@ class MainActivity : FragmentActivity() {
                         Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
                     }
                 )
+                UpdateInstallDialog(
+                    update = availableUpdate,
+                    isDownloading = isUpdateDownloading,
+                    downloadedApkUri = downloadedUpdateUri,
+                    onDismiss = {
+                        availableUpdate = null
+                        downloadedUpdateUri = null
+                    },
+                    onDownload = { update -> downloadUpdate(update) },
+                    onBackUp = { showBackupActions() },
+                    onInstall = { uri -> launchPackageInstaller(uri) }
+                )
             }
         }
         if (!getSharedPreferences("backup_ui", MODE_PRIVATE).getBoolean("tutorial_seen", false)) showBackupTutorial()
@@ -153,23 +169,14 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun showUpdateAvailable(update: AppUpdate) {
-        val message = buildString {
-            append("새 버전 ${update.versionName}을(를) 사용할 수 있습니다.\n\n")
-            append("설치 전에 백업을 한 번 내보내는 것을 권장합니다. 같은 서명으로 빌드한 APK면 기존 데이터는 유지됩니다.")
-            if (update.notes.isNotBlank()) append("\n\n${update.notes}")
-        }
-        AlertDialog.Builder(this)
-            .setTitle("새 업데이트")
-            .setMessage(message)
-            .setPositiveButton("다운로드") { _, _ -> downloadUpdate(update) }
-            .setNeutralButton("백업 먼저") { _, _ -> showBackupActions() }
-            .setNegativeButton("나중에", null)
-            .show()
+        availableUpdate = update
     }
 
     private fun downloadUpdate(update: AppUpdate) {
-        Toast.makeText(this, "업데이트 다운로드를 시작합니다.", Toast.LENGTH_SHORT).show()
+        isUpdateDownloading = true
+        downloadedUpdateUri = null
         val id = runCatching { AppUpdateManager.download(this, update) }.getOrElse {
+            isUpdateDownloading = false
             Toast.makeText(this, "다운로드를 시작하지 못했습니다.", Toast.LENGTH_LONG).show(); return
         }
         lifecycleScope.launch {
@@ -181,18 +188,10 @@ class MainActivity : FragmentActivity() {
                     delay(1_000)
                 }
             }
-            if (apkUri != null) showInstallUpdate(apkUri!!) else Toast.makeText(this@MainActivity, "업데이트 다운로드가 완료되지 않았습니다.", Toast.LENGTH_LONG).show()
+            isUpdateDownloading = false
+            if (apkUri != null) downloadedUpdateUri = apkUri
+            else Toast.makeText(this@MainActivity, "업데이트 다운로드가 완료되지 않았습니다.", Toast.LENGTH_LONG).show()
         }
-    }
-
-    private fun showInstallUpdate(apkUri: Uri) {
-        AlertDialog.Builder(this)
-            .setTitle("다운로드 완료")
-            .setMessage("업데이트 파일을 받았습니다. 백업을 확인한 뒤 지금 업데이트할까요? Android의 설치 확인 화면이 열립니다.")
-            .setPositiveButton("업데이트") { _, _ -> launchPackageInstaller(apkUri) }
-            .setNeutralButton("백업 먼저") { _, _ -> showBackupActions() }
-            .setNegativeButton("나중에", null)
-            .show()
     }
 
     private fun launchPackageInstaller(apkUri: Uri) {

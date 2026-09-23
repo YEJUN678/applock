@@ -17,8 +17,10 @@ android {
     applicationId = "com.aistudio.applock.nxpattern"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    // Keep this in sync with versions.txt. Android will reject an APK whose
+    // versionCode is not higher than the installed build.
+    versionCode = 3
+    versionName = "3.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
