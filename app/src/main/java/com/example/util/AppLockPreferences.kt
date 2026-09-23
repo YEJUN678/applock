@@ -7,6 +7,7 @@ import com.example.model.IntruderLog
 import com.example.model.LockConfig
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Calendar
 
 object AppLockPreferences {
     private const val PREFS_NAME = "app_lock_prefs"
@@ -20,6 +21,7 @@ object AppLockPreferences {
     private const val KEY_KNOCK_CODE = "saved_knock_code"
     private const val KEY_BIOMETRIC = "biometric_enabled"
     private const val KEY_THEME = "background_theme"
+    private const val KEY_CUSTOM_LOCK_BACKGROUND_URI = "custom_lock_background_uri"
     private const val KEY_TIMEOUT = "lock_timeout_seconds"
     private const val KEY_STEALTH_PATTERN = "stealth_pattern"
     private const val KEY_FAKE_CRASH = "fake_crash"
@@ -31,8 +33,15 @@ object AppLockPreferences {
     private const val KEY_RANDOM_PIN_KEYPAD = "random_pin_keypad_enabled"
     private const val KEY_INTRUDER_SIREN = "intruder_siren_enabled"
     private const val KEY_PANIC_SHAKE = "panic_shake_enabled"
+    private const val KEY_PANIC_SHAKE_STRENGTH = "panic_shake_strength"
     private const val KEY_DURESS_PIN = "duress_pin"
     private const val KEY_NOTIFICATION_PRIVACY = "notification_privacy_enabled"
+    private const val KEY_SCREEN_OFF_LOCK = "screen_off_lock_enabled"
+    private const val KEY_SCHEDULE_LOCK = "schedule_lock_enabled"
+    private const val KEY_SCHEDULE_START_HOUR = "schedule_start_hour"
+    private const val KEY_SCHEDULE_START_MINUTE = "schedule_start_minute"
+    private const val KEY_SCHEDULE_END_HOUR = "schedule_end_hour"
+    private const val KEY_SCHEDULE_END_MINUTE = "schedule_end_minute"
     private const val KEY_DURESS_SESSION = "duress_session"
     private const val KEY_FACE_DOWN_PROTECTION = "face_down_protection"
     private const val KEY_INTRUDER_LOGS = "intruder_logs"
@@ -226,6 +235,7 @@ object AppLockPreferences {
         } catch (_: Exception) {
             BackgroundTheme.CYBER_WALLPAPER
         }
+        val customBackgroundUri = prefs.getString(KEY_CUSTOM_LOCK_BACKGROUND_URI, null)
         val timeoutSeconds = prefs.getInt(KEY_TIMEOUT, 30)
         cachedTimeoutMs = timeoutSeconds * 1000L
         val stealth = prefs.getBoolean(KEY_STEALTH_PATTERN, false)
@@ -238,7 +248,14 @@ object AppLockPreferences {
         val randomPin = prefs.getBoolean(KEY_RANDOM_PIN_KEYPAD, false)
         val siren = prefs.getBoolean(KEY_INTRUDER_SIREN, false)
         val panicShake = prefs.getBoolean(KEY_PANIC_SHAKE, false)
+        val panicShakeStrength = prefs.getInt(KEY_PANIC_SHAKE_STRENGTH, 10).coerceIn(1, 10)
         val notificationPrivacy = prefs.getBoolean(KEY_NOTIFICATION_PRIVACY, false)
+        val screenOffLock = prefs.getBoolean(KEY_SCREEN_OFF_LOCK, true)
+        val scheduleLock = prefs.getBoolean(KEY_SCHEDULE_LOCK, false)
+        val startHour = prefs.getInt(KEY_SCHEDULE_START_HOUR, 9)
+        val startMinute = prefs.getInt(KEY_SCHEDULE_START_MINUTE, 0)
+        val endHour = prefs.getInt(KEY_SCHEDULE_END_HOUR, 18)
+        val endMinute = prefs.getInt(KEY_SCHEDULE_END_MINUTE, 0)
 
         return LockConfig(
             lockType = lockType,
@@ -250,6 +267,7 @@ object AppLockPreferences {
             savedKnockCode = knockCode,
             biometricEnabled = biometric,
             backgroundTheme = theme,
+            customLockBackgroundUri = customBackgroundUri,
             lockTimeoutSeconds = timeoutSeconds,
             isStealthPattern = stealth,
             isFakeCrashEnabled = fakeCrash,
@@ -261,7 +279,14 @@ object AppLockPreferences {
             isRandomPinKeypad = randomPin,
             isIntruderSirenEnabled = siren,
             isPanicShakeEnabled = panicShake,
-            isNotificationPrivacyEnabled = notificationPrivacy
+            panicShakeStrength = panicShakeStrength,
+            isNotificationPrivacyEnabled = notificationPrivacy,
+            isScreenOffLockEnabled = screenOffLock,
+            isScheduleLockEnabled = scheduleLock,
+            scheduleStartHour = startHour,
+            scheduleStartMinute = startMinute,
+            scheduleEndHour = endHour,
+            scheduleEndMinute = endMinute
         )
     }
 
@@ -279,6 +304,7 @@ object AppLockPreferences {
             .putString(KEY_KNOCK_CODE, knockStr)
             .putBoolean(KEY_BIOMETRIC, config.biometricEnabled)
             .putString(KEY_THEME, config.backgroundTheme.name)
+            .putString(KEY_CUSTOM_LOCK_BACKGROUND_URI, config.customLockBackgroundUri)
             .putInt(KEY_TIMEOUT, config.lockTimeoutSeconds)
             .putBoolean(KEY_STEALTH_PATTERN, config.isStealthPattern)
             .putBoolean(KEY_FAKE_CRASH, config.isFakeCrashEnabled)
@@ -290,13 +316,30 @@ object AppLockPreferences {
             .putBoolean(KEY_RANDOM_PIN_KEYPAD, config.isRandomPinKeypad)
             .putBoolean(KEY_INTRUDER_SIREN, config.isIntruderSirenEnabled)
             .putBoolean(KEY_PANIC_SHAKE, config.isPanicShakeEnabled)
+            .putInt(KEY_PANIC_SHAKE_STRENGTH, config.panicShakeStrength.coerceIn(1, 10))
             .putBoolean(KEY_NOTIFICATION_PRIVACY, config.isNotificationPrivacyEnabled)
+            .putBoolean(KEY_SCREEN_OFF_LOCK, config.isScreenOffLockEnabled)
+            .putBoolean(KEY_SCHEDULE_LOCK, config.isScheduleLockEnabled)
+            .putInt(KEY_SCHEDULE_START_HOUR, config.scheduleStartHour)
+            .putInt(KEY_SCHEDULE_START_MINUTE, config.scheduleStartMinute)
+            .putInt(KEY_SCHEDULE_END_HOUR, config.scheduleEndHour)
+            .putInt(KEY_SCHEDULE_END_MINUTE, config.scheduleEndMinute)
             .apply()
 
         // Also sync uninstall protection state
         if (config.isUninstallProtectionEnabled) {
             setUninstallProtectionEnabled(context, true)
         }
+    }
+
+    /** True during the configured protection window, including windows spanning midnight. */
+    fun isScheduleLockActive(context: Context, now: Calendar = Calendar.getInstance()): Boolean {
+        val config = getLockConfig(context)
+        if (!config.isScheduleLockEnabled) return false
+        val minute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+        val start = config.scheduleStartHour * 60 + config.scheduleStartMinute
+        val end = config.scheduleEndHour * 60 + config.scheduleEndMinute
+        return if (start == end) true else if (start < end) minute in start until end else minute >= start || minute < end
     }
 
     fun getIntruderLogs(context: Context): List<IntruderLog> {

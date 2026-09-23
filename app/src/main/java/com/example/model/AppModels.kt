@@ -37,6 +37,7 @@ data class LockConfig(
     val savedKnockCode: List<Int> = listOf(1, 2, 3, 4), // 4-quadrant knock sequence (1: TL, 2: TR, 3: BL, 4: BR)
     val biometricEnabled: Boolean = true,
     val backgroundTheme: BackgroundTheme = BackgroundTheme.CYBER_WALLPAPER,
+    val customLockBackgroundUri: String? = null,
     val lockTimeoutSeconds: Int = 30, // 0 = 즉시, 30 = 30초, 60 = 1분, 300 = 5분
     val isStealthPattern: Boolean = false, // Hide line while drawing pattern
     val isFakeCrashEnabled: Boolean = false, // Show fake crash dialog first
@@ -48,6 +49,7 @@ data class LockConfig(
     val isRandomPinKeypad: Boolean = false, // Shuffle PIN digits to prevent shoulder surfing
     val isIntruderSirenEnabled: Boolean = false, // Sound alert buzzer on intrusion attempts
     val isPanicShakeEnabled: Boolean = false, // Instantly lock all when phone is vigorously shaken
+    val panicShakeStrength: Int = 10, // 1..10; 10 is maximum sensitivity
     val isNotificationPrivacyEnabled: Boolean = false, // Hide notifications from locked apps
     val isScreenOffLockEnabled: Boolean = true, // Instant lock on screen off
     val isScheduleLockEnabled: Boolean = false, // Time schedule auto-lock

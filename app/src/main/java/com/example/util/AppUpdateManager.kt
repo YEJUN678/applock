@@ -8,6 +8,11 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class AppUpdate(val versionCode: Int, val versionName: String, val apkUrl: String, val notes: String = "")
+data class AppUpdateDownloadStatus(
+    val apkUri: Uri? = null,
+    val progressPercent: Int? = null,
+    val failed: Boolean = false
+)
 
 /** Small, dependency-free updater for APKs distributed outside Play Store. */
 object AppUpdateManager {
@@ -52,11 +57,23 @@ object AppUpdateManager {
     }
 
     fun downloadedApkUri(context: Context, downloadId: Long): Uri? {
+        return downloadStatus(context, downloadId).apkUri
+    }
+
+    /** Returns progress as well as terminal failure, which DownloadManager otherwise hides. */
+    fun downloadStatus(context: Context, downloadId: Long): AppUpdateDownloadStatus {
         val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         manager.query(DownloadManager.Query().setFilterById(downloadId)).use { cursor ->
-            if (!cursor.moveToFirst()) return null
+            if (!cursor.moveToFirst()) return AppUpdateDownloadStatus(failed = true)
             val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-            return if (status == DownloadManager.STATUS_SUCCESSFUL) manager.getUriForDownloadedFile(downloadId) else null
+            if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                return AppUpdateDownloadStatus(apkUri = manager.getUriForDownloadedFile(downloadId), progressPercent = 100)
+            }
+            if (status == DownloadManager.STATUS_FAILED) return AppUpdateDownloadStatus(failed = true)
+            val downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+            val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+            val progress = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 99) else null
+            return AppUpdateDownloadStatus(progressPercent = progress)
         }
     }
 }

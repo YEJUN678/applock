@@ -88,6 +88,7 @@ fun LockOverlayScreen(
     targetCalculatorCode: String = "1234",
     targetKnockCode: List<Int> = listOf(1, 2, 3, 4),
     backgroundTheme: BackgroundTheme,
+    customBackgroundUri: String? = null,
     biometricEnabled: Boolean,
     isStealthPattern: Boolean = false,
     isFakeCrashEnabled: Boolean = false,
@@ -156,7 +157,7 @@ fun LockOverlayScreen(
     }
 
 
-    AppLockBackground(theme = backgroundTheme, modifier = modifier) {
+    AppLockBackground(theme = backgroundTheme, customImageUri = customBackgroundUri, modifier = modifier) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier

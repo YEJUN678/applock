@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.provider.Settings
 import android.text.InputType
 import android.widget.EditText
+import android.widget.ImageView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -54,6 +55,8 @@ import com.example.util.AppUpdate
 import com.example.util.AppUpdateManager
 import com.example.util.IntruderPhotoExporter
 import com.example.util.PanicShakeDetector
+import com.example.util.QrRecoveryManager
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -62,7 +65,43 @@ import kotlinx.coroutines.withContext
 class MainActivity : FragmentActivity() {
     private var availableUpdate by mutableStateOf<AppUpdate?>(null)
     private var isUpdateDownloading by mutableStateOf(false)
+    private var updateDownloadProgress by mutableStateOf<Int?>(null)
     private var downloadedUpdateUri by mutableStateOf<Uri?>(null)
+    private var pendingInstallerUri: Uri? = null
+    fun showRecoveryQr() {
+        val qrView = ImageView(this).apply {
+            setImageBitmap(QrRecoveryManager.createRecoveryQr(this@MainActivity))
+            adjustViewBounds = true
+            setPadding(32, 16, 32, 16)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("오프라인 복구 QR")
+            .setMessage("안전한 오프라인 장소에 보관하고 누구와도 공유하지 마세요. 새 QR을 만들면 이전 QR은 무효가 됩니다.")
+            .setView(qrView)
+            .setPositiveButton("완료", null)
+            .show()
+    }
+
+    fun scanRecoveryQr() {
+        GmsBarcodeScanning.getClient(this).startScan()
+            .addOnSuccessListener { barcode ->
+                if (QrRecoveryManager.isValid(this, barcode.rawValue)) {
+                    Toast.makeText(this, "복구 QR을 확인했습니다. 암호화 백업 파일을 선택하세요.", Toast.LENGTH_LONG).show()
+                    selectBackupFile.launch(arrayOf("application/octet-stream", "*/*"))
+                } else {
+                    Toast.makeText(this, "유효하지 않거나 만료된 복구 QR입니다.", Toast.LENGTH_LONG).show()
+                }
+            }
+            .addOnFailureListener { Toast.makeText(this, "QR 스캔을 시작할 수 없습니다. Google Play 서비스를 확인하세요.", Toast.LENGTH_LONG).show() }
+    }
+    private val pickLockBackground = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            AppLockPreferences.saveLockConfig(this, AppLockPreferences.getLockConfig(this).copy(customLockBackgroundUri = uri.toString()))
+            Toast.makeText(this, "사진을 잠금 배경으로 적용했습니다.", Toast.LENGTH_SHORT).show()
+            recreate()
+        }
+    }
     fun showDuressPinSetup() {
         val field = EditText(this).apply { inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "일반 PIN과 다른 4자리 PIN" }
         AlertDialog.Builder(this).setTitle("듀레스 PIN 설정").setMessage("입력하면 사생활 필름·침입 기록·즉시 재잠금이 실행됩니다.").setView(field)
@@ -117,7 +156,9 @@ class MainActivity : FragmentActivity() {
                 )
                 UpdateInstallDialog(
                     update = availableUpdate,
+                    installedVersion = BuildConfig.VERSION_NAME,
                     isDownloading = isUpdateDownloading,
+                    downloadProgress = updateDownloadProgress,
                     downloadedApkUri = downloadedUpdateUri,
                     onDismiss = {
                         availableUpdate = null
@@ -130,7 +171,7 @@ class MainActivity : FragmentActivity() {
             }
         }
         if (!getSharedPreferences("backup_ui", MODE_PRIVATE).getBoolean("tutorial_seen", false)) showBackupTutorial()
-        checkForAppUpdate()
+        checkForAppUpdate(silent = true)
     }
 
     private fun showBackupTutorial() = AlertDialog.Builder(this)
@@ -161,10 +202,29 @@ class MainActivity : FragmentActivity() {
             }.setNegativeButton("취소", null).show()
     }
 
-    private fun checkForAppUpdate() {
+    private fun checkForAppUpdate(silent: Boolean = false) {
         lifecycleScope.launch {
-            val update = withContext(Dispatchers.IO) { runCatching { AppUpdateManager.check() }.getOrNull() }
-            if (update != null && update.versionCode > BuildConfig.VERSION_CODE) showUpdateAvailable(update)
+            val result = withContext(Dispatchers.IO) { runCatching { AppUpdateManager.check() } }
+            val update = result.getOrNull()
+            when {
+                update == null && !silent -> Toast.makeText(
+                    this@MainActivity,
+                    "업데이트 정보를 가져오지 못했습니다: ${result.exceptionOrNull()?.message ?: "인터넷 연결을 확인하세요."}",
+                    Toast.LENGTH_LONG
+                ).show()
+                update == null -> Unit
+                update.versionCode > BuildConfig.VERSION_CODE -> showUpdateAvailable(update)
+                !silent -> {
+                    // This is intentionally visible while testing releases: it makes the
+                    // strict version-code comparison obvious rather than looking broken.
+                    Toast.makeText(
+                        this@MainActivity,
+                        "최신 버전입니다. 설치됨 ${BuildConfig.VERSION_NAME} · 서버 ${update.versionName}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                else -> Unit
+            }
         }
     }
 
@@ -174,28 +234,37 @@ class MainActivity : FragmentActivity() {
 
     private fun downloadUpdate(update: AppUpdate) {
         isUpdateDownloading = true
+        updateDownloadProgress = 0
         downloadedUpdateUri = null
         val id = runCatching { AppUpdateManager.download(this, update) }.getOrElse {
             isUpdateDownloading = false
             Toast.makeText(this, "다운로드를 시작하지 못했습니다.", Toast.LENGTH_LONG).show(); return
         }
         lifecycleScope.launch {
-            var apkUri: Uri? = null
-            withContext(Dispatchers.IO) {
-                repeat(720) { // up to about 12 minutes, without blocking the UI
-                    apkUri = AppUpdateManager.downloadedApkUri(this@MainActivity, id)
-                    if (apkUri != null) return@withContext
-                    delay(1_000)
+            repeat(720) { // up to about 12 minutes, without blocking the UI
+                val status = withContext(Dispatchers.IO) { AppUpdateManager.downloadStatus(this@MainActivity, id) }
+                updateDownloadProgress = status.progressPercent
+                if (status.failed) {
+                    isUpdateDownloading = false
+                    Toast.makeText(this@MainActivity, "업데이트 다운로드에 실패했습니다. 다시 시도해 주세요.", Toast.LENGTH_LONG).show()
+                    return@launch
                 }
+                if (status.apkUri != null) {
+                    isUpdateDownloading = false
+                    updateDownloadProgress = 100
+                    downloadedUpdateUri = status.apkUri
+                    return@launch
+                }
+                delay(1_000)
             }
             isUpdateDownloading = false
-            if (apkUri != null) downloadedUpdateUri = apkUri
-            else Toast.makeText(this@MainActivity, "업데이트 다운로드가 완료되지 않았습니다.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this@MainActivity, "업데이트 다운로드가 완료되지 않았습니다.", Toast.LENGTH_LONG).show()
         }
     }
 
     private fun launchPackageInstaller(apkUri: Uri) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            pendingInstallerUri = apkUri
             Toast.makeText(this, "이 출처의 앱 설치를 허용한 뒤 다시 업데이트를 눌러 주세요.", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
             return
@@ -206,6 +275,15 @@ class MainActivity : FragmentActivity() {
         }
         runCatching { startActivity(intent) }.onFailure {
             Toast.makeText(this, "설치 화면을 열 수 없습니다.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val apkUri = pendingInstallerUri
+        if (apkUri != null && (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls())) {
+            pendingInstallerUri = null
+            launchPackageInstaller(apkUri)
         }
     }
 }
@@ -243,8 +321,8 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
     var faceDownProtectionEnabled by remember { mutableStateOf(AppLockPreferences.isFaceDownProtectionEnabled(context)) }
 
     // Panic Shake Detector listener: immediately resets all temporary unlocks on vigorous shake
-    DisposableEffect(lockConfig.isPanicShakeEnabled, lifecycleOwner) {
-        val shakeDetector = PanicShakeDetector(context) {
+    DisposableEffect(lockConfig.isPanicShakeEnabled, lockConfig.panicShakeStrength, lifecycleOwner) {
+        val shakeDetector = PanicShakeDetector(context, lockConfig.panicShakeStrength) {
             AppLockPreferences.resetAllTemporaryUnlocks()
             onShowToast("🚨 긴급 흔들림 감지: 모든 앱이 즉시 재잠금되었습니다!")
             val current = AppLockPreferences.getLockConfig(context)
@@ -514,6 +592,16 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                 },
                 onConfigureDisguise = { (context as? MainActivity)?.showLauncherDisguiseChooser() },
                 onManageBackup = { (context as? MainActivity)?.showBackupActions() },
+                onShowRecoveryQr = { (context as? MainActivity)?.showRecoveryQr() },
+                onScanRecoveryQr = { (context as? MainActivity)?.scanRecoveryQr() },
+                onPickCustomLockBackground = { (context as? MainActivity)?.pickLockBackground?.launch(arrayOf("image/*")) },
+                onCheckForUpdates = { (context as? MainActivity)?.checkForAppUpdate() },
+                onToggleScreenOffLock = { enabled ->
+                    val updated = lockConfig.copy(isScreenOffLockEnabled = enabled)
+                    lockConfig = updated
+                    AppLockPreferences.saveLockConfig(context, updated)
+                    onShowToast(if (enabled) "화면 끄기 즉시 재잠금이 켜졌습니다." else "화면 끄기 즉시 재잠금이 꺼졌습니다.")
+                },
                 onConfigureDuressPin = { (context as? MainActivity)?.showDuressPinSetup() },
                 onToggleNotificationPrivacy = { enabled -> (context as? MainActivity)?.setNotificationPrivacy(enabled) },
                 isFaceDownProtectionEnabled = faceDownProtectionEnabled,

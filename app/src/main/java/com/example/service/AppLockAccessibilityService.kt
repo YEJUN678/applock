@@ -177,7 +177,7 @@ class AppLockAccessibilityService : AccessibilityService() {
 
         // Check if current foreground app is marked as locked
         if (AppLockPreferences.isPackageLocked(applicationContext, packageName)) {
-            if (!AppLockPreferences.isTemporarilyUnlocked(packageName)) {
+            if (AppLockPreferences.isScheduleLockActive(applicationContext) || !AppLockPreferences.isTemporarilyUnlocked(packageName)) {
                 // INSTANT INTERCEPT: Show Lock Screen immediately
                 LockActivity.start(applicationContext, packageName)
             } else {

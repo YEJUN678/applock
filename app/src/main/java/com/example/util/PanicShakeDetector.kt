@@ -12,6 +12,7 @@ import kotlin.math.sqrt
  */
 class PanicShakeDetector(
     private val context: Context,
+    strength: Int = 10,
     private val onShakeDetected: () -> Unit
 ) : SensorEventListener {
 
@@ -19,6 +20,7 @@ class PanicShakeDetector(
     private val accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private var lastShakeTimestamp = 0L
     private var isListening = false
+    private val shakeThresholdGravity = 4.0f - (strength.coerceIn(1, 10) - 1) * 0.2f
 
     fun start() {
         if (!isListening && accelerometer != null) {
@@ -49,7 +51,7 @@ class PanicShakeDetector(
         // Net g-force
         val gForce = sqrt((gX * gX + gY * gY + gZ * gZ).toDouble()).toFloat()
 
-        if (gForce > SHAKE_THRESHOLD_GRAVITY) {
+        if (gForce > shakeThresholdGravity) {
             val now = System.currentTimeMillis()
             if (now - lastShakeTimestamp > SHAKE_COOLDOWN_MS) {
                 lastShakeTimestamp = now
@@ -63,7 +65,6 @@ class PanicShakeDetector(
     }
 
     companion object {
-        private const val SHAKE_THRESHOLD_GRAVITY = 3.2f // Requires a clearly intentional strong shake
         private const val SHAKE_COOLDOWN_MS = 1500L
     }
 }

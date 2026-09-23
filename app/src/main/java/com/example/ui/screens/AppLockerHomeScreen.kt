@@ -93,6 +93,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.TimePickerDialog
 import com.example.model.AppItem
 import com.example.model.BackgroundTheme
 import com.example.model.IntruderLog
@@ -105,6 +106,7 @@ import com.example.ui.components.ChangeKnockCodeModal
 import com.example.ui.components.ChangePasswordModal
 import com.example.ui.components.ChangePinModal
 import com.example.ui.components.NxNPatternLockView
+import com.example.ui.components.SecurityMetric
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Checklist
@@ -153,6 +155,11 @@ fun AppLockerHomeScreen(
     onTogglePrivacyFilter: () -> Unit = {},
     onConfigureDisguise: () -> Unit = {},
     onManageBackup: () -> Unit = {},
+    onShowRecoveryQr: () -> Unit = {},
+    onScanRecoveryQr: () -> Unit = {},
+    onPickCustomLockBackground: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
+    onToggleScreenOffLock: (Boolean) -> Unit = {},
     onConfigureDuressPin: () -> Unit = {},
     onToggleNotificationPrivacy: (Boolean) -> Unit = {},
     isFaceDownProtectionEnabled: Boolean = false,
@@ -752,6 +759,7 @@ fun AppLockerHomeScreen(
                     3 -> if (!isDuressMode) {
                         SettingsView(
                             lockConfig = lockConfig,
+                            lockedAppCount = lockedApps.size,
                             hasOverlayPermission = hasOverlayPermission,
                             hasAccessibilityPermission = hasAccessibilityPermission,
                             hasUsageStatsPermission = hasUsageStatsPermission,
@@ -799,6 +807,12 @@ fun AppLockerHomeScreen(
                             onTogglePrivacyFilter = onTogglePrivacyFilter,
                             onConfigureDisguise = onConfigureDisguise,
                             onManageBackup = onManageBackup,
+                            onShowRecoveryQr = onShowRecoveryQr,
+                            onScanRecoveryQr = onScanRecoveryQr,
+                            onPickCustomLockBackground = onPickCustomLockBackground,
+                            onCheckForUpdates = onCheckForUpdates,
+                            onToggleScreenOffLock = onToggleScreenOffLock,
+                            onUpdateConfig = onLockConfigChanged,
                             onConfigureDuressPin = onConfigureDuressPin,
                             onToggleNotificationPrivacy = onToggleNotificationPrivacy,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
@@ -918,6 +932,7 @@ fun AppLockerHomeScreen(
 @Composable
 fun SettingsView(
     lockConfig: LockConfig,
+    lockedAppCount: Int = 0,
     hasOverlayPermission: Boolean,
     hasAccessibilityPermission: Boolean,
     hasUsageStatsPermission: Boolean,
@@ -945,6 +960,12 @@ fun SettingsView(
     onTogglePrivacyFilter: () -> Unit = {},
     onConfigureDisguise: () -> Unit = {},
     onManageBackup: () -> Unit = {},
+    onShowRecoveryQr: () -> Unit = {},
+    onScanRecoveryQr: () -> Unit = {},
+    onPickCustomLockBackground: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
+    onToggleScreenOffLock: (Boolean) -> Unit = {},
+    onUpdateConfig: (LockConfig) -> Unit = {},
     onConfigureDuressPin: () -> Unit = {},
     onToggleNotificationPrivacy: (Boolean) -> Unit = {},
     isFaceDownProtectionEnabled: Boolean = false,
@@ -958,6 +979,34 @@ fun SettingsView(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxSize()
     ) {
+        // Redesigned security dashboard: surface the three facts users need before
+        // opening individual settings cards.
+        item {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = CyberSurfaceDark),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.55f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Security, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(30.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("보안 제어 센터", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                            Text("현재 보호 상태를 빠르게 확인하세요", color = TextSecondary, fontSize = 12.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        SecurityMetric("보호 앱", "${lockedAppCount}개", NeonCyan, Modifier.weight(1f))
+                        SecurityMetric("인증", lockConfig.lockType.title, NeonPurple, Modifier.weight(1f))
+                        SecurityMetric("긴급 흔들기", if (lockConfig.isPanicShakeEnabled) "강도 ${lockConfig.panicShakeStrength}" else "꺼짐", NeonAmber, Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+
         // 0. Restricted Settings Guide (Android 13/14+)
         item {
             Card(
@@ -1276,6 +1325,9 @@ fun SettingsView(
                         Text(if (lockConfig.lockType == LockType.PIN) "듀레스 PIN 설정 (긴급 보호)" else "듀레스 PIN: PIN 잠금 방식에서 사용 가능", color = NeonRed, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(onClick = onManageBackup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("재설치 백업 · 복원", color = NeonCyan, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onShowRecoveryQr, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen), modifier = Modifier.fillMaxWidth()) { Text("오프라인 복구 QR 만들기", color = NeonGreen, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onScanRecoveryQr, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("복구 QR 스캔", color = NeonAmber, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onCheckForUpdates, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen), modifier = Modifier.fillMaxWidth()) { Text("업데이트 확인", color = NeonGreen, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = { onToggleNotificationPrivacy(!lockConfig.isNotificationPrivacyEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple), modifier = Modifier.fillMaxWidth()) { Text(if (lockConfig.isNotificationPrivacyEnabled) "잠긴 앱 알림 숨김: 켜짐" else "잠긴 앱 알림 숨김 켜기", color = NeonPurple, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = { onToggleFaceDownProtection(!isFaceDownProtectionEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text(if (isFaceDownProtectionEnabled) "뒤집기 보호: 켜짐" else "뒤집으면 즉시 잠금 켜기", color = NeonAmber, fontWeight = FontWeight.Bold) }
                 }
@@ -1937,6 +1989,59 @@ fun SettingsView(
 
         // 6.7 App Self Protection (본 앱 자체 보호)
         item {
+            val context = LocalContext.current
+            fun pickTime(isStart: Boolean) {
+                val hour = if (isStart) lockConfig.scheduleStartHour else lockConfig.scheduleEndHour
+                val minute = if (isStart) lockConfig.scheduleStartMinute else lockConfig.scheduleEndMinute
+                TimePickerDialog(context, { _, selectedHour, selectedMinute ->
+                    onUpdateConfig(if (isStart) lockConfig.copy(scheduleStartHour = selectedHour, scheduleStartMinute = selectedMinute)
+                    else lockConfig.copy(scheduleEndHour = selectedHour, scheduleEndMinute = selectedMinute))
+                }, hour, minute, true).show()
+            }
+            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = CyberCardDark), border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("시간대 자동 재잠금", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text("설정한 시간에는 잠긴 앱을 다시 열 때마다 인증합니다.", color = TextSecondary, fontSize = 12.sp)
+                        }
+                        Switch(checked = lockConfig.isScheduleLockEnabled, onCheckedChange = { onUpdateConfig(lockConfig.copy(isScheduleLockEnabled = it)) })
+                    }
+                    if (lockConfig.isScheduleLockEnabled) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = { pickTime(true) }, modifier = Modifier.weight(1f)) { Text("시작 %02d:%02d".format(lockConfig.scheduleStartHour, lockConfig.scheduleStartMinute)) }
+                            OutlinedButton(onClick = { pickTime(false) }, modifier = Modifier.weight(1f)) { Text("종료 %02d:%02d".format(lockConfig.scheduleEndHour, lockConfig.scheduleEndMinute)) }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 6.7 App Self Protection (본 앱 자체 보호)
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth().padding(18.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("화면을 끄면 즉시 재잠금", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text("화면을 다시 켰을 때 잠긴 앱은 인증을 다시 요구합니다.", color = TextSecondary, fontSize = 12.sp)
+                    }
+                    Switch(checked = lockConfig.isScreenOffLockEnabled, onCheckedChange = onToggleScreenOffLock)
+                }
+            }
+        }
+
+        // 6.7 App Self Protection (본 앱 자체 보호)
+        item {
             Card(
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = CyberCardDark),
@@ -2100,6 +2205,17 @@ fun SettingsView(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("배경 화면 테마 변경", color = NeonPurple, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onPickCustomLockBackground,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(imageVector = Icons.Default.PhotoCamera, contentDescription = null, tint = NeonCyan)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (lockConfig.customLockBackgroundUri == null) "사진첩에서 배경 선택" else "선택한 사진 배경 바꾸기", color = NeonCyan, fontWeight = FontWeight.Bold)
                     }
                 }
             }

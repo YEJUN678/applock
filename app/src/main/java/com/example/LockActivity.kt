@@ -123,6 +123,7 @@ class LockActivity : FragmentActivity() {
                     targetCalculatorCode = lockConfig.savedCalculatorCode,
                     targetKnockCode = lockConfig.savedKnockCode,
                     backgroundTheme = lockConfig.backgroundTheme,
+                    customBackgroundUri = lockConfig.customLockBackgroundUri,
                     biometricEnabled = lockConfig.biometricEnabled,
                     isStealthPattern = lockConfig.isStealthPattern,
                     isFakeCrashEnabled = lockConfig.isFakeCrashEnabled,

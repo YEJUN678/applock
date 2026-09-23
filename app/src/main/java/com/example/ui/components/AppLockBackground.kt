@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.model.BackgroundTheme
 import com.example.ui.theme.CyberBgDark
@@ -17,11 +18,24 @@ import com.example.ui.theme.CyberBgDark
 @Composable
 fun AppLockBackground(
     theme: BackgroundTheme,
+    customImageUri: String? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        when (theme) {
+        if (!customImageUri.isNullOrBlank()) {
+            AsyncImage(
+                model = customImageUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(listOf(Color(0x99090D16), Color(0xDD0D1527), Color(0xF2090D16)))
+                )
+            )
+        } else when (theme) {
             BackgroundTheme.CYBER_WALLPAPER -> {
                 Image(
                     painter = painterResource(id = R.drawable.bg_cyber_lock),

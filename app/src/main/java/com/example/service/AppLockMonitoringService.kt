@@ -52,8 +52,10 @@ class AppLockMonitoringService : Service() {
     private val screenOffReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF) {
-                // Instant Lock on Screen Off: reset all temporary unlock sessions immediately
-                AppLockPreferences.resetAllTemporaryUnlocks()
+                // Users may turn this off when a short re-unlock grace period is preferred.
+                if (AppLockPreferences.getLockConfig(applicationContext).isScreenOffLockEnabled) {
+                    AppLockPreferences.resetAllTemporaryUnlocks()
+                }
             }
         }
     }
@@ -99,7 +101,7 @@ class AppLockMonitoringService : Service() {
         val config = AppLockPreferences.getLockConfig(applicationContext)
         if (config.isPanicShakeEnabled) {
             if (panicShakeDetector == null) {
-                panicShakeDetector = PanicShakeDetector(applicationContext) {
+                panicShakeDetector = PanicShakeDetector(applicationContext, config.panicShakeStrength) {
                     // Triggered when shaken in ANY app across the entire system!
                     AppLockPreferences.resetAllTemporaryUnlocks()
 
@@ -167,7 +169,7 @@ class AppLockMonitoringService : Service() {
                                     (currentPackage.contains("packageinstaller") || currentPackage == "com.google.android.packageinstaller" || currentPackage == "com.android.packageinstaller")
 
                             if (AppLockPreferences.isPackageLocked(applicationContext, currentPackage) || isUninstallAttempt) {
-                                if (!AppLockPreferences.isTemporarilyUnlocked(currentPackage)) {
+                                if (AppLockPreferences.isScheduleLockActive(applicationContext) || !AppLockPreferences.isTemporarilyUnlocked(currentPackage)) {
                                     LockActivity.start(applicationContext, currentPackage)
                                 } else {
                                     AppLockPreferences.touchTemporarilyUnlocked(currentPackage)
