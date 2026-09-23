@@ -1,6 +1,6 @@
 # Upload this file to the repository root on the main branch.
 # For each release, increment versionCode and point apkUrl to that release asset.
-versionCode=3
-versionName=3.0
-apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta3/app-debug.apk
+versionCode=4
+versionName=4.0
+apkUrl=https//github.com/YEJUN678/applock/releases/download/applockbeta3/app-debug.apk
 notes=업데이트 UI 개선
