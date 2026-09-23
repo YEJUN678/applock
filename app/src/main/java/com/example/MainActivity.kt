@@ -75,7 +75,6 @@ class MainActivity : FragmentActivity() {
     private var downloadedUpdateUri by mutableStateOf<Uri?>(null)
     private var pendingInstallerUri: Uri? = null
     private var incomingSharedUri by mutableStateOf<Uri?>(null)
-    private var incomingSharedUri by mutableStateOf<Uri?>(null)
     private var pendingLostModePackages: List<String>? = null
     private val requestLostModeLocation = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         activateLostModeNow(pendingLostModePackages.orEmpty())

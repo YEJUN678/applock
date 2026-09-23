@@ -247,7 +247,7 @@ fun AppLockerHomeScreen(
                             IconButton(onClick = { showMoreMenu = !showMoreMenu }, modifier = Modifier.size(38.dp)) {
                                 Icon(imageVector = Icons.Default.MoreVert, contentDescription = "더보기", tint = TextPrimary)
                             }
-                            AnimatedVisibility(
+                            androidx.compose.animation.AnimatedVisibility(
                                 visible = showMoreMenu,
                                 enter = fadeIn() + scaleIn(initialScale = 0.78f),
                                 exit = fadeOut() + scaleOut(targetScale = 0.82f),

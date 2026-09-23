@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -64,7 +63,7 @@ class SecureNotesActivity : FragmentActivity() {
             Column(modifier = Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("보안 메모")
                 Text("AES‑GCM 암호화 저장 · 1분 후 자동 잠금")
-                TextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth().weight(1f), placeholder = { Text("비밀 메모를 입력하세요") })
+                TextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("비밀 메모를 입력하세요") })
                 Button(onClick = { SecureNotesManager.save(this@SecureNotesActivity, note); finish() }, modifier = Modifier.fillMaxWidth()) { Text("암호화해 저장") }
                 OutlinedButton(onClick = { finish() }, modifier = Modifier.fillMaxWidth()) { Text("취소") }
             }
