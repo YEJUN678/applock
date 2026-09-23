@@ -261,6 +261,7 @@ fun AppLockerHomeScreen(
                                 ) {
                                     Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(onClick = { showMoreMenu = false; onOpenVault() }) { Icon(Icons.Default.EnhancedEncryption, "금고", tint = NeonGreen) }
+                                        IconButton(onClick = { showMoreMenu = false; onOpenSecureNotes() }) { Icon(Icons.Default.EnhancedEncryption, "보안 메모", tint = NeonPurple) }
                                         IconButton(onClick = { showMoreMenu = false; onTogglePrivacyFilter() }) { Icon(Icons.Default.VisibilityOff, "사생활 필름", tint = NeonAmber) }
                                         if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 2 }) { Icon(Icons.Default.PhotoCamera, "침입자 기록", tint = NeonRed) }
                                         if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 3 }) { Icon(Icons.Default.Settings, "설정 & 기능", tint = NeonCyan) }

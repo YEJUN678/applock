@@ -87,8 +87,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun activateLostModeNow(packages: List<String>) {
-        LostModeManager.setActive(this, true)
-        AppLockPreferences.lockAll(this, packages)
+        LostModeManager.activate(this, packages)
         AppLockPreferences.resetAllTemporaryUnlocks()
         val location = LostModeManager.bestKnownLocation(this)
         IntruderCameraHelper.captureIntruderSelfie(this, this) { photoPath ->
@@ -108,8 +107,8 @@ class MainActivity : FragmentActivity() {
     }
 
     fun disableLostMode() {
-        LostModeManager.setActive(this, false)
-        Toast.makeText(this, "Lost Mode를 해제했습니다. 앱 잠금 설정은 유지됩니다.", Toast.LENGTH_LONG).show()
+        val restored = LostModeManager.deactivateAndRestore(this)
+        Toast.makeText(this, if (restored) "Lost Mode 이전의 앱 잠금 상태로 복원했습니다." else "Lost Mode를 해제했습니다. 이전 버전에서 설정된 잠금은 설정 화면에서 해제할 수 있습니다.", Toast.LENGTH_LONG).show()
     }
     fun showLostModeMap() {
         val event = LostModeManager.events(this).firstOrNull { it.location != null }
@@ -196,6 +195,10 @@ class MainActivity : FragmentActivity() {
         AlertDialog.Builder(this).setTitle("잠금 화면 비상 연락처").setMessage("잠금 화면에는 이 정보만 표시됩니다.").setView(input)
             .setPositiveButton("저장") { _, _ -> AppLockPreferences.setEmergencyContact(this, input.text.toString()); Toast.makeText(this, "비상 연락처를 저장했습니다.", Toast.LENGTH_SHORT).show() }
             .setNegativeButton("취소", null).show()
+    }
+    fun openSecureNotes() {
+        runCatching { startActivity(Intent(this, SecureNotesActivity::class.java)) }
+            .onFailure { Toast.makeText(this, "보안 메모를 열지 못했습니다. 앱을 다시 설치한 뒤 시도해 주세요.", Toast.LENGTH_LONG).show() }
     }
     fun showLockStyleEditor() {
         val options = arrayOf("선명 · 기본 아이콘", "다크 · 큰 아이콘", "은은함 · 작은 아이콘")
@@ -712,7 +715,7 @@ fun AppLockerApp(
                     showVaultScreen = true
                 },
                 onOpenSecureNotes = {
-                    context.startActivity(Intent(context, SecureNotesActivity::class.java))
+                    (context as? MainActivity)?.openSecureNotes()
                 },
                 isLostModeActive = LostModeManager.isActive(context),
                 onActivateLostMode = { (context as? MainActivity)?.activateLostMode(appsList.map { it.packageName }) },

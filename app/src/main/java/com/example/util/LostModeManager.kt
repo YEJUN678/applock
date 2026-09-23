@@ -16,11 +16,32 @@ object LostModeManager {
     private const val PREFS = "lost_mode"
     private const val ACTIVE = "active"
     private const val EVENTS = "events"
+    private const val PRE_LOST_LOCKED_PACKAGES = "pre_lost_locked_packages"
     private const val LAST_CAPTURE = "last_capture"
     private const val CAPTURE_INTERVAL_MS = 5 * 60 * 1000L
 
     fun isActive(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ACTIVE, false)
     fun setActive(context: Context, active: Boolean) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(ACTIVE, active).apply()
+
+    /** Preserve the owner's choices before emergency all-app locking. */
+    fun activate(context: Context, packagesToLock: Collection<String>) {
+        val before = AppLockPreferences.getLockedPackages(context)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putStringSet(PRE_LOST_LOCKED_PACKAGES, before)
+            .putBoolean(ACTIVE, true)
+            .apply()
+        AppLockPreferences.lockAll(context, packagesToLock)
+    }
+
+    /** Restores exactly the lock selection from immediately before Lost Mode. */
+    fun deactivateAndRestore(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val snapshot = prefs.getStringSet(PRE_LOST_LOCKED_PACKAGES, null) ?: return false
+        AppLockPreferences.unlockAll(context)
+        if (snapshot.isNotEmpty()) AppLockPreferences.lockPackagesBatch(context, snapshot)
+        prefs.edit().remove(PRE_LOST_LOCKED_PACKAGES).putBoolean(ACTIVE, false).apply()
+        return true
+    }
 
     fun bestKnownLocation(context: Context): String? {
         val allowed = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
