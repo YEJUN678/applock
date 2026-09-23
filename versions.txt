@@ -1,0 +1,4 @@
+versionCode=2
+versionName=beta1
+apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta1/app-debug.apk
+notes=버전 beta2!
