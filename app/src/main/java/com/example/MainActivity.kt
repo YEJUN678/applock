@@ -276,6 +276,8 @@ class MainActivity : FragmentActivity() {
         setContent {
             MyApplicationTheme {
                 AppLockerApp(
+                    incomingSharedUri = incomingSharedUri,
+                    onIncomingShareHandled = { incomingSharedUri = null },
                     onShowToast = { msg ->
                         Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
                     }
@@ -416,7 +418,11 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-fun AppLockerApp(onShowToast: (String) -> Unit) {
+fun AppLockerApp(
+    incomingSharedUri: Uri?,
+    onIncomingShareHandled: () -> Unit,
+    onShowToast: (String) -> Unit
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -540,11 +546,11 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                 )
             }
         } else if (showVaultScreen || incomingSharedUri != null) {
-            BackHandler { showVaultScreen = false; incomingSharedUri = null }
+            BackHandler { showVaultScreen = false; onIncomingShareHandled() }
             FileVaultScreen(
                 onNavigateBack = { showVaultScreen = false },
                 incomingShareUri = incomingSharedUri,
-                onIncomingShareHandled = { incomingSharedUri = null }
+                onIncomingShareHandled = onIncomingShareHandled
             )
         } else {
             AppLockerHomeScreen(
