@@ -102,6 +102,9 @@ class MainActivity : FragmentActivity() {
             recreate()
         }
     }
+    fun chooseCustomLockBackground() {
+        pickLockBackground.launch(arrayOf("image/*"))
+    }
     fun showDuressPinSetup() {
         val field = EditText(this).apply { inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "일반 PIN과 다른 4자리 PIN" }
         AlertDialog.Builder(this).setTitle("듀레스 PIN 설정").setMessage("입력하면 사생활 필름·침입 기록·즉시 재잠금이 실행됩니다.").setView(field)
@@ -202,7 +205,7 @@ class MainActivity : FragmentActivity() {
             }.setNegativeButton("취소", null).show()
     }
 
-    private fun checkForAppUpdate(silent: Boolean = false) {
+    fun checkForAppUpdate(silent: Boolean = false) {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { AppUpdateManager.check() } }
             val update = result.getOrNull()
@@ -594,7 +597,7 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                 onManageBackup = { (context as? MainActivity)?.showBackupActions() },
                 onShowRecoveryQr = { (context as? MainActivity)?.showRecoveryQr() },
                 onScanRecoveryQr = { (context as? MainActivity)?.scanRecoveryQr() },
-                onPickCustomLockBackground = { (context as? MainActivity)?.pickLockBackground?.launch(arrayOf("image/*")) },
+                onPickCustomLockBackground = { (context as? MainActivity)?.chooseCustomLockBackground() },
                 onCheckForUpdates = { (context as? MainActivity)?.checkForAppUpdate() },
                 onToggleScreenOffLock = { enabled ->
                     val updated = lockConfig.copy(isScreenOffLockEnabled = enabled)
