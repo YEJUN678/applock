@@ -1,4 +1,4 @@
 versionCode=5
 versionName=5.0
-apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta4/app-debug.apk
+apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta3/app-debug.apk
 notes=업데이트 UI 개선
