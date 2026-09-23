@@ -1,4 +1,4 @@
 versionCode=5
 versionName=5.0
-apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta3/app-debug.apk
-notes=업데이트 UI 개선
+apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta4/app-debug.apk
+notes=업데이트 창을 단계형 UI로 개선, 알림 미리보기 차단, 오프라인 QR 비상 복구, 잠금 배경 사진첩 선택 및 UI 대규모 개선
