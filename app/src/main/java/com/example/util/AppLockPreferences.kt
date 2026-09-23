@@ -28,6 +28,7 @@ object AppLockPreferences {
     private const val KEY_TIMEOUT = "lock_timeout_seconds"
     private const val KEY_STEALTH_PATTERN = "stealth_pattern"
     private const val KEY_FAKE_CRASH = "fake_crash"
+    private const val KEY_FAKE_SCREEN_RULES = "fake_screen_rules"
     private const val KEY_VIBRATION = "vibration_enabled"
     private const val KEY_APP_SELF_PROTECT = "app_self_protect"
     private const val KEY_INTRUDER_SELFIE_ENABLED = "intruder_selfie_enabled"
@@ -90,6 +91,19 @@ object AppLockPreferences {
         }
         cachedLockedPackages = current
         getPrefs(context).edit().putStringSet(KEY_LOCKED_PACKAGES, current).apply()
+    }
+
+    fun fakeScreenFor(context: Context, packageName: String): String? {
+        val rules = getPrefs(context).getStringSet(KEY_FAKE_SCREEN_RULES, emptySet()) ?: emptySet()
+        return rules.firstOrNull { it.substringBefore('|') == packageName }?.substringAfter('|')
+    }
+
+    fun setFakeScreenFor(context: Context, packageName: String, screen: String?) {
+        val prefs = getPrefs(context)
+        val rules = (prefs.getStringSet(KEY_FAKE_SCREEN_RULES, emptySet()) ?: emptySet())
+            .filterNot { it.substringBefore('|') == packageName }.toMutableSet()
+        if (screen != null) rules.add("$packageName|$screen")
+        prefs.edit().putStringSet(KEY_FAKE_SCREEN_RULES, rules).apply()
     }
 
     @Synchronized

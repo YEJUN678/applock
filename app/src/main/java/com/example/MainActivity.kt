@@ -196,6 +196,20 @@ class MainActivity : FragmentActivity() {
             .setPositiveButton("저장") { _, _ -> AppLockPreferences.setEmergencyContact(this, input.text.toString()); Toast.makeText(this, "비상 연락처를 저장했습니다.", Toast.LENGTH_SHORT).show() }
             .setNegativeButton("취소", null).show()
     }
+    fun showFakeScreenRuleEditor(apps: List<AppItem>) {
+        val protected = apps.filter { it.isLocked }
+        if (protected.isEmpty()) { Toast.makeText(this, "먼저 가짜 화면을 적용할 앱을 잠그세요.", Toast.LENGTH_LONG).show(); return }
+        AlertDialog.Builder(this).setTitle("앱별 가짜 화면")
+            .setItems(protected.map { it.name }.toTypedArray()) { _, index ->
+                val app = protected[index]
+                AlertDialog.Builder(this).setTitle("${app.name} 가짜 화면")
+                    .setItems(arrayOf("오류 화면", "빈 앨범", "계산기", "자동 추천", "설정 해제")) { _, choice ->
+                        val rule = when (choice) { 0 -> "CRASH"; 1 -> "EMPTY_ALBUM"; 2 -> "CALCULATOR"; else -> null }
+                        AppLockPreferences.setFakeScreenFor(this, app.packageName, rule)
+                        Toast.makeText(this, if (rule == null) "${app.name}: 자동 추천으로 변경했습니다." else "${app.name} 가짜 화면을 저장했습니다.", Toast.LENGTH_SHORT).show()
+                    }.show()
+            }.show()
+    }
     fun openSecureNotes() {
         runCatching { startActivity(Intent(this, SecureNotesActivity::class.java)) }
             .onFailure { Toast.makeText(this, "보안 메모를 열지 못했습니다. 앱을 다시 설치한 뒤 시도해 주세요.", Toast.LENGTH_LONG).show() }
@@ -707,6 +721,9 @@ fun AppLockerApp(
                     }
                     AppLockMonitoringService.startService(context)
                     onShowToast("새 보안 설정이 저장되었습니다.")
+                },
+                onConfigureFakeScreen = { apps ->
+                    (context as? MainActivity)?.showFakeScreenRuleEditor(apps)
                 },
                 onTestLaunchApp = { app ->
                     LockActivity.start(context, app.packageName)

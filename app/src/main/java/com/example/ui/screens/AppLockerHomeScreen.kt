@@ -169,6 +169,7 @@ fun AppLockerHomeScreen(
     onPickCustomLockBackground: () -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
     onToggleScreenOffLock: (Boolean) -> Unit = {},
+    onConfigureFakeScreen: (List<AppItem>) -> Unit = {},
     onConfigureDuressPin: () -> Unit = {},
     onConfigureEmergencyContact: () -> Unit = {},
     onEditLockStyle: () -> Unit = {},
@@ -816,6 +817,7 @@ fun AppLockerHomeScreen(
                             onToggleFakeCrash = {
                                 onLockConfigChanged(lockConfig.copy(isFakeCrashEnabled = it))
                             },
+                            onConfigureFakeScreen = { onConfigureFakeScreen(lockedApps) },
                             onToggleIntruderSelfie = {
                                 onLockConfigChanged(lockConfig.copy(isIntruderSelfieEnabled = it))
                             },
@@ -980,6 +982,7 @@ fun SettingsView(
     onToggleBiometric: (Boolean) -> Unit,
     onToggleStealthPattern: (Boolean) -> Unit,
     onToggleFakeCrash: (Boolean) -> Unit,
+    onConfigureFakeScreen: () -> Unit = {},
     onToggleIntruderSelfie: (Boolean) -> Unit = {},
     onChangeIntruderSelfieThreshold: (Int) -> Unit = {},
     onOpenVault: () -> Unit = {},
@@ -1630,6 +1633,16 @@ fun SettingsView(
                                 checkedTrackColor = NeonRed
                             )
                         )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = onConfigureFakeScreen,
+                        enabled = lockConfig.isFakeCrashEnabled,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("앱별 가짜 화면 설정", color = NeonRed, fontWeight = FontWeight.Bold)
                     }
                 }
             }

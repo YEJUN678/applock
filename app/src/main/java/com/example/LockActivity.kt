@@ -316,6 +316,9 @@ class LockActivity : FragmentActivity() {
      * while still leaving every other protected app on the crash disguise.
      */
     private fun fakeScreenKindFor(pkg: String, label: String): FakeScreenKind {
+        AppLockPreferences.fakeScreenFor(this, pkg)?.let { saved ->
+            return runCatching { FakeScreenKind.valueOf(saved) }.getOrDefault(FakeScreenKind.CRASH)
+        }
         val key = "$pkg $label".lowercase()
         return when {
             listOf("gallery", "album", "photos", "사진", "갤러리").any(key::contains) -> FakeScreenKind.EMPTY_ALBUM

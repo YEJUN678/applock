@@ -1,4 +1,4 @@
 versionCode=6
 versionName=6.0
 apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta6/app-debug.apk
-notes=버그 수정
+notes=앱별 가짜 화면 · File Drop Box · Lost Mode 안정화 · 보안 메모 개선
