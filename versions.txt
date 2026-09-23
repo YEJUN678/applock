@@ -1,4 +1,4 @@
-versionCode=5
-versionName=5.0
-apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta5/app-debug.apk
-notes=전체 잠금 해제 생체/PIN 인증 · 흔들림 잠금 감도 강화 · 사진 배경/스타일 프리셋 · 보안 메모 AES-GCM 암호화 · Lost Mode · 복구 QR 생성/스캔/저장 · 잠긴 앱 알림 마스킹 · 설치/삭제 앱 변화 알림 · 비상 연락처 · File Drop Box · 업데이트 UI 개선 · 메뉴 애니메이션 · 위장 아이콘 안정화
+versionCode=6
+versionName=6.0
+apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta6/app-debug.apk
+notes=버그 수정
