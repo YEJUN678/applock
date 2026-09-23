@@ -89,6 +89,10 @@ fun LockOverlayScreen(
     targetKnockCode: List<Int> = listOf(1, 2, 3, 4),
     backgroundTheme: BackgroundTheme,
     customBackgroundUri: String? = null,
+    emergencyContact: String = "",
+    lockMessage: String = "",
+    lockIconScale: Float = 1f,
+    lockBackgroundDim: Float = 0.82f,
     biometricEnabled: Boolean,
     isStealthPattern: Boolean = false,
     isFakeCrashEnabled: Boolean = false,
@@ -157,7 +161,7 @@ fun LockOverlayScreen(
     }
 
 
-    AppLockBackground(theme = backgroundTheme, customImageUri = customBackgroundUri, modifier = modifier) {
+    AppLockBackground(theme = backgroundTheme, customImageUri = customBackgroundUri, dimAmount = lockBackgroundDim, modifier = modifier) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -213,7 +217,7 @@ fun LockOverlayScreen(
             Surface(
                 shape = CircleShape,
                 color = Color(0x4400F0FF),
-                modifier = Modifier.size(72.dp),
+                modifier = Modifier.size((72 * lockIconScale).dp),
                 border = androidx.compose.foundation.BorderStroke(2.dp, NeonCyan)
             ) {
                 val iconBitmap = remember(appIcon) {
@@ -258,6 +262,7 @@ fun LockOverlayScreen(
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
             )
+            if (lockMessage.isNotBlank()) Text(lockMessage, color = NeonCyan, fontSize = 13.sp, textAlign = TextAlign.Center)
 
             Spacer(modifier = Modifier.height(6.dp))
 
@@ -267,6 +272,10 @@ fun LockOverlayScreen(
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center
             )
+            if (emergencyContact.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("비상 연락: $emergencyContact", color = TextSecondary, fontSize = 12.sp, textAlign = TextAlign.Center)
+            }
 
             if (attemptCount > 0) {
                 Spacer(modifier = Modifier.height(4.dp))

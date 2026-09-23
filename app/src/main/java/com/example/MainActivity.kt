@@ -5,10 +5,13 @@ import android.view.WindowManager
 import android.widget.Toast
 import android.app.AlertDialog
 import android.content.ComponentName
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.provider.Settings
+import android.provider.MediaStore
+import android.os.Environment
 import android.text.InputType
 import android.widget.EditText
 import android.widget.ImageView
@@ -55,7 +58,10 @@ import com.example.util.AppUpdate
 import com.example.util.AppUpdateManager
 import com.example.util.IntruderPhotoExporter
 import com.example.util.PanicShakeDetector
+import com.example.util.BiometricHelper
+import com.example.util.BiometricStatus
 import com.example.util.QrRecoveryManager
+import com.example.util.LostModeManager
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -68,9 +74,58 @@ class MainActivity : FragmentActivity() {
     private var updateDownloadProgress by mutableStateOf<Int?>(null)
     private var downloadedUpdateUri by mutableStateOf<Uri?>(null)
     private var pendingInstallerUri: Uri? = null
+    private var incomingSharedUri by mutableStateOf<Uri?>(null)
+    private var incomingSharedUri by mutableStateOf<Uri?>(null)
+    private var pendingLostModePackages: List<String>? = null
+    private val requestLostModeLocation = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        activateLostModeNow(pendingLostModePackages.orEmpty())
+        pendingLostModePackages = null
+    }
+
+    fun activateLostMode(packages: List<String>) {
+        pendingLostModePackages = packages
+        requestLostModeLocation.launch(arrayOf(android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.CAMERA))
+    }
+
+    private fun activateLostModeNow(packages: List<String>) {
+        LostModeManager.setActive(this, true)
+        AppLockPreferences.lockAll(this, packages)
+        AppLockPreferences.resetAllTemporaryUnlocks()
+        val location = LostModeManager.bestKnownLocation(this)
+        IntruderCameraHelper.captureIntruderSelfie(this, this) { photoPath ->
+            LostModeManager.record(this, location, photoPath)
+            Toast.makeText(this, "Lost Mode가 활성화되었습니다. 잠금과 로컬 보안 기록을 적용했습니다.", Toast.LENGTH_LONG).show()
+            LockActivity.start(this, packageName)
+        }
+    }
+
+    private fun captureLostModeSnapshotOnOpen() {
+        if (!LostModeManager.shouldCaptureOnOpen(this)) return
+        val location = LostModeManager.bestKnownLocation(this)
+        IntruderCameraHelper.captureIntruderSelfie(this, this) { photoPath ->
+            LostModeManager.record(this, location, photoPath)
+            Toast.makeText(this, "Lost Mode: 기기 열기 기록을 저장했습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun disableLostMode() {
+        LostModeManager.setActive(this, false)
+        Toast.makeText(this, "Lost Mode를 해제했습니다. 앱 잠금 설정은 유지됩니다.", Toast.LENGTH_LONG).show()
+    }
+    fun showLostModeMap() {
+        val event = LostModeManager.events(this).firstOrNull { it.location != null }
+        val uri = LostModeManager.mapUri(event?.location)
+        if (uri == null) {
+            Toast.makeText(this, "지도에 열 수 있는 위치 기록이 없습니다. Lost Mode 위치 권한을 확인하세요.", Toast.LENGTH_LONG).show()
+            return
+        }
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+            .onFailure { Toast.makeText(this, "지도 앱을 열 수 없습니다.", Toast.LENGTH_LONG).show() }
+    }
     fun showRecoveryQr() {
+        val bitmap = QrRecoveryManager.createRecoveryQr(this)
         val qrView = ImageView(this).apply {
-            setImageBitmap(QrRecoveryManager.createRecoveryQr(this@MainActivity))
+            setImageBitmap(bitmap)
             adjustViewBounds = true
             setPadding(32, 16, 32, 16)
         }
@@ -78,9 +133,31 @@ class MainActivity : FragmentActivity() {
             .setTitle("오프라인 복구 QR")
             .setMessage("안전한 오프라인 장소에 보관하고 누구와도 공유하지 마세요. 새 QR을 만들면 이전 QR은 무효가 됩니다.")
             .setView(qrView)
+            .setNeutralButton("기기에 저장") { _, _ ->
+                if (saveRecoveryQr(bitmap)) Toast.makeText(this, "사진 보관함의 AppLockRecovery 폴더에 저장했습니다.", Toast.LENGTH_LONG).show()
+                else Toast.makeText(this, "QR 이미지를 저장하지 못했습니다.", Toast.LENGTH_LONG).show()
+            }
             .setPositiveButton("완료", null)
             .show()
     }
+
+    private fun saveRecoveryQr(bitmap: android.graphics.Bitmap): Boolean = runCatching {
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "AppLock-Recovery-${System.currentTimeMillis()}.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/AppLockRecovery")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+        contentResolver.openOutputStream(uri)?.use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            ?: return false
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            contentResolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+        }
+        true
+    }.getOrDefault(false)
 
     fun scanRecoveryQr() {
         GmsBarcodeScanning.getClient(this).startScan()
@@ -114,6 +191,50 @@ class MainActivity : FragmentActivity() {
                 else Toast.makeText(this, "일반 PIN과 다른 4자리 숫자를 입력하세요.", Toast.LENGTH_LONG).show()
             }.setNegativeButton("취소", null).show()
     }
+    fun showEmergencyContactSetup() {
+        val input = EditText(this).apply { hint = "예: 홍길동 · 010-1234-5678" }
+        input.setText(AppLockPreferences.getEmergencyContact(this))
+        AlertDialog.Builder(this).setTitle("잠금 화면 비상 연락처").setMessage("잠금 화면에는 이 정보만 표시됩니다.").setView(input)
+            .setPositiveButton("저장") { _, _ -> AppLockPreferences.setEmergencyContact(this, input.text.toString()); Toast.makeText(this, "비상 연락처를 저장했습니다.", Toast.LENGTH_SHORT).show() }
+            .setNegativeButton("취소", null).show()
+    }
+    fun showLockStyleEditor() {
+        val options = arrayOf("선명 · 기본 아이콘", "다크 · 큰 아이콘", "은은함 · 작은 아이콘")
+        AlertDialog.Builder(this).setTitle("잠금 화면 스타일")
+            .setItems(options) { _, which ->
+                val style = when (which) { 1 -> 1.2f to 0.92f; 2 -> 0.82f to 0.58f; else -> 1f to 0.82f }
+                AppLockPreferences.saveLockConfig(this, AppLockPreferences.getLockConfig(this).copy(lockIconScale = style.first, lockBackgroundDim = style.second))
+                Toast.makeText(this, "잠금 화면 스타일을 적용했습니다.", Toast.LENGTH_SHORT).show()
+            }.show()
+    }
+    /** Destructive bulk-unlock is never authorized by the duress PIN. */
+    fun authenticateBeforeUnlockAll(onConfirmed: () -> Unit) {
+        val pinField = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            hint = "현재 PIN 입력"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("전체 잠금 해제 인증")
+            .setMessage("생체 인증 또는 현재 PIN이 필요합니다. 듀레스 PIN은 사용할 수 없습니다.")
+            .setView(pinField)
+            .setPositiveButton("현재 PIN으로 해제") { _, _ ->
+                if (pinField.text.toString() == AppLockPreferences.getLockConfig(this).savedPin) onConfirmed()
+                else Toast.makeText(this, "현재 PIN이 올바르지 않습니다.", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("취소", null)
+            .setNeutralButton("생체 인증") { _, _ ->
+                if (BiometricHelper.checkBiometricStatus(this) == BiometricStatus.AVAILABLE) {
+                    BiometricHelper.authenticate(
+                        activity = this,
+                        title = "전체 잠금 해제",
+                        subtitle = "본인 확인 후 모든 앱 잠금을 해제합니다.",
+                        onSuccess = onConfirmed,
+                        onError = { _, message -> Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
+                    )
+                } else Toast.makeText(this, "사용 가능한 생체 인증이 없습니다. 현재 PIN을 입력하세요.", Toast.LENGTH_LONG).show()
+            }
+            .show()
+    }
     fun setNotificationPrivacy(enabled: Boolean) {
         val updated = AppLockPreferences.getLockConfig(this).copy(isNotificationPrivacyEnabled = enabled)
         AppLockPreferences.saveLockConfig(this, updated)
@@ -126,10 +247,12 @@ class MainActivity : FragmentActivity() {
             val default = ComponentName(this, "${packageName}.DefaultAlias")
             val calculator = ComponentName(this, "${packageName}.CalculatorAlias")
             val notes = ComponentName(this, "${packageName}.NotesAlias")
-            listOf(default, calculator, notes).forEach { pm.setComponentEnabledSetting(it, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP) }
             val selected = listOf(default, calculator, notes)[choice]
+            // Keep a launcher component enabled throughout the change so launchers
+            // never treat the app as removed.
             pm.setComponentEnabledSetting(selected, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-            Toast.makeText(this, "위장 아이콘을 적용했습니다. 홈 화면에 반영되기까지 잠시 걸릴 수 있습니다.", Toast.LENGTH_LONG).show()
+            listOf(default, calculator, notes).filter { it != selected }.forEach { pm.setComponentEnabledSetting(it, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP) }
+            Toast.makeText(this, "위장 아이콘을 적용했습니다. 홈 화면을 새로고침하면 반영됩니다.", Toast.LENGTH_LONG).show()
         }.show()
     }
     private var pendingBackupPassword: CharArray? = null
@@ -150,6 +273,7 @@ class MainActivity : FragmentActivity() {
         // screen recording, casting, or the Android recent-apps preview.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
+        incomingSharedUri = intent.takeIf { it.action == Intent.ACTION_SEND }?.getParcelableExtra(Intent.EXTRA_STREAM)
         setContent {
             MyApplicationTheme {
                 AppLockerApp(
@@ -283,6 +407,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        captureLostModeSnapshotOnOpen()
         val apkUri = pendingInstallerUri
         if (apkUri != null && (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls())) {
             pendingInstallerUri = null
@@ -415,10 +540,12 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                     modifier = Modifier.fillMaxSize()
                 )
             }
-        } else if (showVaultScreen) {
-            BackHandler { showVaultScreen = false }
+        } else if (showVaultScreen || incomingSharedUri != null) {
+            BackHandler { showVaultScreen = false; incomingSharedUri = null }
             FileVaultScreen(
-                onNavigateBack = { showVaultScreen = false }
+                onNavigateBack = { showVaultScreen = false },
+                incomingShareUri = incomingSharedUri,
+                onIncomingShareHandled = { incomingSharedUri = null }
             )
         } else {
             AppLockerHomeScreen(
@@ -497,14 +624,16 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                     onShowToast("모든 앱(${appsList.size}개)이 잠금 설정되었습니다.")
                 },
                 onUnlockAll = {
-                    AppLockPreferences.unlockAll(context)
-                    val updated = lockConfig.copy(isAppSelfProtectEnabled = false)
-                    lockConfig = updated
-                    AppLockPreferences.saveLockConfig(context, updated)
-                    for (i in appsList.indices) {
-                        appsList[i] = appsList[i].copy(isLocked = false)
+                    (context as? MainActivity)?.authenticateBeforeUnlockAll {
+                        AppLockPreferences.unlockAll(context)
+                        val updated = lockConfig.copy(isAppSelfProtectEnabled = false)
+                        lockConfig = updated
+                        AppLockPreferences.saveLockConfig(context, updated)
+                        for (i in appsList.indices) {
+                            appsList[i] = appsList[i].copy(isLocked = false)
+                        }
+                        onShowToast("모든 앱의 잠금이 해제되었습니다.")
                     }
-                    onShowToast("모든 앱의 잠금이 해제되었습니다.")
                 },
                 onBatchLock = { packages, lock ->
                     for (pkg in packages) {
@@ -577,6 +706,13 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                 onOpenVault = {
                     showVaultScreen = true
                 },
+                onOpenSecureNotes = {
+                    context.startActivity(Intent(context, SecureNotesActivity::class.java))
+                },
+                isLostModeActive = LostModeManager.isActive(context),
+                onActivateLostMode = { (context as? MainActivity)?.activateLostMode(appsList.map { it.packageName }) },
+                onDisableLostMode = { (context as? MainActivity)?.disableLostMode() },
+                onOpenLostModeMap = { (context as? MainActivity)?.showLostModeMap() },
                 onTogglePrivacyFilter = {
                     if (!AppLockPermissionHelper.hasOverlayPermission(context)) {
                         AppLockPermissionHelper.requestOverlayPermission(context)
@@ -606,6 +742,8 @@ fun AppLockerApp(onShowToast: (String) -> Unit) {
                     onShowToast(if (enabled) "화면 끄기 즉시 재잠금이 켜졌습니다." else "화면 끄기 즉시 재잠금이 꺼졌습니다.")
                 },
                 onConfigureDuressPin = { (context as? MainActivity)?.showDuressPinSetup() },
+                onConfigureEmergencyContact = { (context as? MainActivity)?.showEmergencyContactSetup() },
+                onEditLockStyle = { (context as? MainActivity)?.showLockStyleEditor() },
                 onToggleNotificationPrivacy = { enabled -> (context as? MainActivity)?.setNotificationPrivacy(enabled) },
                 isFaceDownProtectionEnabled = faceDownProtectionEnabled,
                 onToggleFaceDownProtection = { enabled ->

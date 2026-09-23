@@ -16,12 +16,15 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,12 +62,13 @@ fun UpdateInstallDialog(
                 Spacer(Modifier.size(10.dp))
                 Column {
                     Text(when { isReady -> "설치 준비가 끝났어요"; isDownloading -> "안전하게 다운로드 중"; else -> "새 업데이트 발견" }, fontWeight = FontWeight.ExtraBold)
-                    Text("v$installedVersion  →  v${currentUpdate.versionName}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("App Lock & Vault", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                VersionBanner(installedVersion, currentUpdate.versionName)
                 UpdateSteps(isDownloading = isDownloading, isReady = isReady, progress = downloadProgress)
                 HorizontalDivider()
                 when {
@@ -83,9 +87,7 @@ fun UpdateInstallDialog(
                     else -> {
                         Text("현재 데이터와 설정은 같은 서명으로 설치하면 그대로 유지됩니다.")
                         if (currentUpdate.notes.isNotBlank()) {
-                            HorizontalDivider()
-                            Text("이번 업데이트", fontWeight = FontWeight.SemiBold)
-                            Text(currentUpdate.notes, style = MaterialTheme.typography.bodySmall)
+                            ReleaseNotesCard(currentUpdate.notes)
                         }
                         SafetyNote()
                     }
@@ -115,12 +117,54 @@ fun UpdateInstallDialog(
 }
 
 @Composable
+private fun VersionBanner(installedVersion: String, availableVersion: String) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)
+        ) {
+            Column {
+                Text("현재 버전", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text("v$installedVersion", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+            Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column(horizontalAlignment = Alignment.End) {
+                Text("새 버전", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text("v$availableVersion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReleaseNotesCard(notes: String) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("이번 릴리스", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(notes, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
 private fun UpdateSteps(isDownloading: Boolean, isReady: Boolean, progress: Int?) {
     val downloadColor = if (isDownloading || isReady) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        UpdateStep("1", "업데이트 정보 확인", true, MaterialTheme.colorScheme.tertiary)
-        UpdateStep("2", if (isDownloading) "파일 다운로드 ${progress?.let { "($it%)" } ?: ""}" else "업데이트 파일 다운로드", isDownloading || isReady, downloadColor)
-        UpdateStep("3", "Android 설치 확인", isReady, MaterialTheme.colorScheme.tertiary)
+    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.padding(13.dp)) {
+            Text("업데이트 진행", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            UpdateStep("01", "업데이트 정보 확인", true, MaterialTheme.colorScheme.tertiary)
+            UpdateStep("02", if (isDownloading) "파일 다운로드 ${progress?.let { "($it%)" } ?: ""}" else "업데이트 파일 다운로드", isDownloading || isReady, downloadColor)
+            UpdateStep("03", "Android 설치 확인", isReady, MaterialTheme.colorScheme.tertiary)
+        }
     }
 }
 

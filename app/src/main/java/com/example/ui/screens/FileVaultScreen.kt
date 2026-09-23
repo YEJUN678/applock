@@ -118,6 +118,8 @@ import java.util.Locale
 @Composable
 fun FileVaultScreen(
     onNavigateBack: () -> Unit,
+    incomingShareUri: Uri? = null,
+    onIncomingShareHandled: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -163,6 +165,24 @@ fun FileVaultScreen(
     LaunchedEffect(Unit) {
         if (VaultRecoveryPassword.isSet()) FileCryptoManager.createSampleVaultFileIfEmpty(context)
         reloadFiles()
+    }
+
+    // File Drop Box: content shared from another app is encrypted immediately
+    // after the vault recovery password is available.
+    LaunchedEffect(incomingShareUri, showRecoveryPasswordDialog) {
+        val uri = incomingShareUri ?: return@LaunchedEffect
+        if (showRecoveryPasswordDialog || !VaultRecoveryPassword.isSet()) return@LaunchedEffect
+        isProcessing = true
+        processingTitle = "공유 파일을 금고에 저장하는 중"
+        val (name, _) = FileCryptoManager.resolveUriMetadata(context, uri)
+        processingSubtext = "$name 암호화 중..."
+        val result = FileCryptoManager.encryptFileToPublicDrive(context, uri) { processingProgress = it }
+        isProcessing = false
+        if (result.isSuccess) {
+            Toast.makeText(context, "$name 파일을 암호화 금고에 저장했습니다.", Toast.LENGTH_LONG).show()
+            reloadFiles()
+        } else Toast.makeText(context, "공유 파일을 암호화하지 못했습니다.", Toast.LENGTH_LONG).show()
+        onIncomingShareHandled()
     }
 
     if (showRecoveryPasswordDialog) {

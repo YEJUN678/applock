@@ -1,6 +1,10 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -152,6 +156,11 @@ fun AppLockerHomeScreen(
     onLockConfigChanged: (LockConfig) -> Unit,
     onTestLaunchApp: (AppItem) -> Unit,
     onOpenVault: () -> Unit = {},
+    onOpenSecureNotes: () -> Unit = {},
+    isLostModeActive: Boolean = false,
+    onActivateLostMode: () -> Unit = {},
+    onDisableLostMode: () -> Unit = {},
+    onOpenLostModeMap: () -> Unit = {},
     onTogglePrivacyFilter: () -> Unit = {},
     onConfigureDisguise: () -> Unit = {},
     onManageBackup: () -> Unit = {},
@@ -161,6 +170,8 @@ fun AppLockerHomeScreen(
     onCheckForUpdates: () -> Unit = {},
     onToggleScreenOffLock: (Boolean) -> Unit = {},
     onConfigureDuressPin: () -> Unit = {},
+    onConfigureEmergencyContact: () -> Unit = {},
+    onEditLockStyle: () -> Unit = {},
     onToggleNotificationPrivacy: (Boolean) -> Unit = {},
     isFaceDownProtectionEnabled: Boolean = false,
     onToggleFaceDownProtection: (Boolean) -> Unit = {},
@@ -232,23 +243,30 @@ fun AppLockerHomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        IconButton(
-                            onClick = { showMoreMenu = true },
-                            modifier = Modifier.size(38.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "더보기",
-                                tint = TextPrimary
-                            )
-                        }
-                        DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
-                            Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                IconButton(onClick = { showMoreMenu = false; onOpenVault() }) { Icon(Icons.Default.EnhancedEncryption, "금고", tint = NeonGreen) }
-                                IconButton(onClick = { showMoreMenu = false; onTogglePrivacyFilter() }) { Icon(Icons.Default.VisibilityOff, "사생활 필름", tint = NeonAmber) }
-                                if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 2 }) { Icon(Icons.Default.PhotoCamera, "침입자 기록", tint = NeonRed) }
-                                if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 3 }) { Icon(Icons.Default.Settings, "설정 & 기능", tint = NeonCyan) }
-                                IconButton(onClick = { showMoreMenu = false; onRefreshApps() }) { Icon(Icons.Default.Refresh, "새로고침", tint = TextPrimary) }
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            IconButton(onClick = { showMoreMenu = !showMoreMenu }, modifier = Modifier.size(38.dp)) {
+                                Icon(imageVector = Icons.Default.MoreVert, contentDescription = "더보기", tint = TextPrimary)
+                            }
+                            AnimatedVisibility(
+                                visible = showMoreMenu,
+                                enter = fadeIn() + scaleIn(initialScale = 0.78f),
+                                exit = fadeOut() + scaleOut(targetScale = 0.82f),
+                                modifier = Modifier.align(Alignment.TopEnd).padding(top = 42.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = CyberCardDark,
+                                    shadowElevation = 12.dp,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f))
+                                ) {
+                                    Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        IconButton(onClick = { showMoreMenu = false; onOpenVault() }) { Icon(Icons.Default.EnhancedEncryption, "금고", tint = NeonGreen) }
+                                        IconButton(onClick = { showMoreMenu = false; onTogglePrivacyFilter() }) { Icon(Icons.Default.VisibilityOff, "사생활 필름", tint = NeonAmber) }
+                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 2 }) { Icon(Icons.Default.PhotoCamera, "침입자 기록", tint = NeonRed) }
+                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 3 }) { Icon(Icons.Default.Settings, "설정 & 기능", tint = NeonCyan) }
+                                        IconButton(onClick = { showMoreMenu = false; onRefreshApps() }) { Icon(Icons.Default.Refresh, "새로고침", tint = TextPrimary) }
+                                    }
+                                }
                             }
                         }
                     }
@@ -804,6 +822,11 @@ fun AppLockerHomeScreen(
                                 onLockConfigChanged(lockConfig.copy(intruderSelfieThreshold = it))
                             },
                             onOpenVault = onOpenVault,
+                            onOpenSecureNotes = onOpenSecureNotes,
+                            isLostModeActive = isLostModeActive,
+                            onActivateLostMode = onActivateLostMode,
+                            onDisableLostMode = onDisableLostMode,
+                            onOpenLostModeMap = onOpenLostModeMap,
                             onTogglePrivacyFilter = onTogglePrivacyFilter,
                             onConfigureDisguise = onConfigureDisguise,
                             onManageBackup = onManageBackup,
@@ -814,6 +837,8 @@ fun AppLockerHomeScreen(
                             onToggleScreenOffLock = onToggleScreenOffLock,
                             onUpdateConfig = onLockConfigChanged,
                             onConfigureDuressPin = onConfigureDuressPin,
+                            onConfigureEmergencyContact = onConfigureEmergencyContact,
+                            onEditLockStyle = onEditLockStyle,
                             onToggleNotificationPrivacy = onToggleNotificationPrivacy,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
@@ -957,6 +982,11 @@ fun SettingsView(
     onToggleIntruderSelfie: (Boolean) -> Unit = {},
     onChangeIntruderSelfieThreshold: (Int) -> Unit = {},
     onOpenVault: () -> Unit = {},
+    onOpenSecureNotes: () -> Unit = {},
+    isLostModeActive: Boolean = false,
+    onActivateLostMode: () -> Unit = {},
+    onDisableLostMode: () -> Unit = {},
+    onOpenLostModeMap: () -> Unit = {},
     onTogglePrivacyFilter: () -> Unit = {},
     onConfigureDisguise: () -> Unit = {},
     onManageBackup: () -> Unit = {},
@@ -967,6 +997,8 @@ fun SettingsView(
     onToggleScreenOffLock: (Boolean) -> Unit = {},
     onUpdateConfig: (LockConfig) -> Unit = {},
     onConfigureDuressPin: () -> Unit = {},
+    onConfigureEmergencyContact: () -> Unit = {},
+    onEditLockStyle: () -> Unit = {},
     onToggleNotificationPrivacy: (Boolean) -> Unit = {},
     isFaceDownProtectionEnabled: Boolean = false,
     onToggleFaceDownProtection: (Boolean) -> Unit = {},
@@ -979,6 +1011,19 @@ fun SettingsView(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxSize()
     ) {
+        item {
+            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = CyberCardDark), border = androidx.compose.foundation.BorderStroke(1.dp, if (isLostModeActive) NeonRed else CyberBorder), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(if (isLostModeActive) "LOST MODE 활성화됨" else "Lost Mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = if (isLostModeActive) NeonRed else TextPrimary)
+                    Text("활성화하면 모든 관리 앱을 즉시 잠그고, 권한이 허용된 현재 위치와 전면 카메라 스냅샷을 기기에만 기록합니다.", color = TextSecondary, fontSize = 12.sp)
+                    Button(onClick = if (isLostModeActive) onDisableLostMode else onActivateLostMode, colors = ButtonDefaults.buttonColors(containerColor = if (isLostModeActive) NeonRed else NeonAmber, contentColor = Color.Black), modifier = Modifier.fillMaxWidth()) {
+                        Text(if (isLostModeActive) "Lost Mode 해제" else "Lost Mode 즉시 활성화", fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(onClick = onOpenLostModeMap, modifier = Modifier.fillMaxWidth()) { Text("최근 Lost Mode 위치를 지도에서 열기") }
+                }
+            }
+        }
+
         // Redesigned security dashboard: surface the three facts users need before
         // opening individual settings cards.
         item {
@@ -1269,6 +1314,10 @@ fun SettingsView(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("보안 파일 금고 열기 (암호화/복호화 관리) ▶", fontWeight = FontWeight.Bold)
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(onClick = onOpenSecureNotes, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple), modifier = Modifier.fillMaxWidth()) {
+                        Text("보안 메모 열기", color = NeonPurple, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -1324,6 +1373,8 @@ fun SettingsView(
                     OutlinedButton(onClick = onConfigureDuressPin, enabled = lockConfig.lockType == LockType.PIN, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed), modifier = Modifier.fillMaxWidth()) {
                         Text(if (lockConfig.lockType == LockType.PIN) "듀레스 PIN 설정 (긴급 보호)" else "듀레스 PIN: PIN 잠금 방식에서 사용 가능", color = NeonRed, fontWeight = FontWeight.Bold)
                     }
+                    OutlinedButton(onClick = onConfigureEmergencyContact, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("잠금 화면 비상 연락처", color = NeonAmber, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onEditLockStyle, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("잠금 화면 스타일 편집기", color = NeonCyan, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = onManageBackup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("재설치 백업 · 복원", color = NeonCyan, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = onShowRecoveryQr, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen), modifier = Modifier.fillMaxWidth()) { Text("오프라인 복구 QR 만들기", color = NeonGreen, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = onScanRecoveryQr, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("복구 QR 스캔", color = NeonAmber, fontWeight = FontWeight.Bold) }

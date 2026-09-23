@@ -19,6 +19,7 @@ import com.example.ui.theme.CyberBgDark
 fun AppLockBackground(
     theme: BackgroundTheme,
     customImageUri: String? = null,
+    dimAmount: Float = 0.82f,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
@@ -32,7 +33,7 @@ fun AppLockBackground(
             )
             Box(
                 modifier = Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(listOf(Color(0x99090D16), Color(0xDD0D1527), Color(0xF2090D16)))
+                    Brush.verticalGradient(listOf(Color.Black.copy(alpha = dimAmount * 0.7f), Color(0xFF0D1527).copy(alpha = dimAmount), Color.Black.copy(alpha = dimAmount)))
                 )
             )
         } else when (theme) {

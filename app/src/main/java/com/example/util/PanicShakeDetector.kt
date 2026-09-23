@@ -20,7 +20,9 @@ class PanicShakeDetector(
     private val accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private var lastShakeTimestamp = 0L
     private var isListening = false
-    private val shakeThresholdGravity = 4.0f - (strength.coerceIn(1, 10) - 1) * 0.2f
+    // Level 10 is deliberately decisive: an intentional sharp shake locks
+    // immediately, while the cooldown prevents repeated triggers.
+    private val shakeThresholdGravity = 3.4f - (strength.coerceIn(1, 10) - 1) * 0.2f
 
     fun start() {
         if (!isListening && accelerometer != null) {

@@ -38,6 +38,9 @@ data class LockConfig(
     val biometricEnabled: Boolean = true,
     val backgroundTheme: BackgroundTheme = BackgroundTheme.CYBER_WALLPAPER,
     val customLockBackgroundUri: String? = null,
+    val lockScreenMessage: String = "",
+    val lockIconScale: Float = 1f,
+    val lockBackgroundDim: Float = 0.82f,
     val lockTimeoutSeconds: Int = 30, // 0 = 즉시, 30 = 30초, 60 = 1분, 300 = 5분
     val isStealthPattern: Boolean = false, // Hide line while drawing pattern
     val isFakeCrashEnabled: Boolean = false, // Show fake crash dialog first

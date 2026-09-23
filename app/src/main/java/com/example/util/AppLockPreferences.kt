@@ -22,6 +22,9 @@ object AppLockPreferences {
     private const val KEY_BIOMETRIC = "biometric_enabled"
     private const val KEY_THEME = "background_theme"
     private const val KEY_CUSTOM_LOCK_BACKGROUND_URI = "custom_lock_background_uri"
+    private const val KEY_LOCK_MESSAGE = "lock_screen_message"
+    private const val KEY_LOCK_ICON_SCALE = "lock_icon_scale"
+    private const val KEY_LOCK_DIM = "lock_background_dim"
     private const val KEY_TIMEOUT = "lock_timeout_seconds"
     private const val KEY_STEALTH_PATTERN = "stealth_pattern"
     private const val KEY_FAKE_CRASH = "fake_crash"
@@ -35,6 +38,7 @@ object AppLockPreferences {
     private const val KEY_PANIC_SHAKE = "panic_shake_enabled"
     private const val KEY_PANIC_SHAKE_STRENGTH = "panic_shake_strength"
     private const val KEY_DURESS_PIN = "duress_pin"
+    private const val KEY_EMERGENCY_CONTACT = "emergency_contact"
     private const val KEY_NOTIFICATION_PRIVACY = "notification_privacy_enabled"
     private const val KEY_SCREEN_OFF_LOCK = "screen_off_lock_enabled"
     private const val KEY_SCHEDULE_LOCK = "schedule_lock_enabled"
@@ -178,6 +182,8 @@ object AppLockPreferences {
 
     fun getDuressPin(context: Context): String = getPrefs(context).getString(KEY_DURESS_PIN, "") ?: ""
     fun setDuressPin(context: Context, pin: String) = getPrefs(context).edit().putString(KEY_DURESS_PIN, pin).apply()
+    fun getEmergencyContact(context: Context): String = getPrefs(context).getString(KEY_EMERGENCY_CONTACT, "") ?: ""
+    fun setEmergencyContact(context: Context, contact: String) = getPrefs(context).edit().putString(KEY_EMERGENCY_CONTACT, contact.trim()).apply()
     fun isDuressSession(context: Context): Boolean = getPrefs(context).getBoolean(KEY_DURESS_SESSION, false)
     fun setDuressSession(context: Context, active: Boolean) = getPrefs(context).edit().putBoolean(KEY_DURESS_SESSION, active).apply()
     fun isFaceDownProtectionEnabled(context: Context): Boolean = getPrefs(context).getBoolean(KEY_FACE_DOWN_PROTECTION, false)
@@ -236,6 +242,9 @@ object AppLockPreferences {
             BackgroundTheme.CYBER_WALLPAPER
         }
         val customBackgroundUri = prefs.getString(KEY_CUSTOM_LOCK_BACKGROUND_URI, null)
+        val lockMessage = prefs.getString(KEY_LOCK_MESSAGE, "") ?: ""
+        val iconScale = prefs.getFloat(KEY_LOCK_ICON_SCALE, 1f).coerceIn(0.75f, 1.35f)
+        val dim = prefs.getFloat(KEY_LOCK_DIM, 0.82f).coerceIn(0.45f, 0.95f)
         val timeoutSeconds = prefs.getInt(KEY_TIMEOUT, 30)
         cachedTimeoutMs = timeoutSeconds * 1000L
         val stealth = prefs.getBoolean(KEY_STEALTH_PATTERN, false)
@@ -268,6 +277,9 @@ object AppLockPreferences {
             biometricEnabled = biometric,
             backgroundTheme = theme,
             customLockBackgroundUri = customBackgroundUri,
+            lockScreenMessage = lockMessage,
+            lockIconScale = iconScale,
+            lockBackgroundDim = dim,
             lockTimeoutSeconds = timeoutSeconds,
             isStealthPattern = stealth,
             isFakeCrashEnabled = fakeCrash,
@@ -305,6 +317,9 @@ object AppLockPreferences {
             .putBoolean(KEY_BIOMETRIC, config.biometricEnabled)
             .putString(KEY_THEME, config.backgroundTheme.name)
             .putString(KEY_CUSTOM_LOCK_BACKGROUND_URI, config.customLockBackgroundUri)
+            .putString(KEY_LOCK_MESSAGE, config.lockScreenMessage)
+            .putFloat(KEY_LOCK_ICON_SCALE, config.lockIconScale)
+            .putFloat(KEY_LOCK_DIM, config.lockBackgroundDim)
             .putInt(KEY_TIMEOUT, config.lockTimeoutSeconds)
             .putBoolean(KEY_STEALTH_PATTERN, config.isStealthPattern)
             .putBoolean(KEY_FAKE_CRASH, config.isFakeCrashEnabled)
