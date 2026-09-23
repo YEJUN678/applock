@@ -91,6 +91,7 @@ fun LockOverlayScreen(
     biometricEnabled: Boolean,
     isStealthPattern: Boolean = false,
     isFakeCrashEnabled: Boolean = false,
+    fakeScreenKind: FakeScreenKind = FakeScreenKind.CRASH,
     isVibrationEnabled: Boolean = true,
     isRandomPinKeypad: Boolean = false,
     isIntruderSirenEnabled: Boolean = false,
@@ -116,6 +117,28 @@ fun LockOverlayScreen(
     }
     var showBiometricModal by remember { mutableStateOf(false) }
     var showFakeCrash by remember { mutableStateOf(isFakeCrashEnabled) }
+
+    // This must be returned before the lock layout is composed.  The previous dialog
+    // lived at the bottom of a Column, so it could be measured below the visible area.
+    if (showFakeCrash) {
+        when (fakeScreenKind) {
+            FakeScreenKind.EMPTY_ALBUM -> EmptyAlbumDisguise(
+                appName = appName,
+                onRevealLock = { showFakeCrash = false }
+            )
+            FakeScreenKind.CALCULATOR -> CalculatorDisguiseLockView(
+                targetCode = targetCalculatorCode,
+                onCodeSubmitted = { enteredCode -> if (enteredCode == targetCalculatorCode) showFakeCrash = false },
+                modifier = modifier.fillMaxSize()
+            )
+            FakeScreenKind.CRASH -> FakeCrashDisguise(
+                appName = appName,
+                onDismiss = onDismiss,
+                onRevealLock = { showFakeCrash = false }
+            )
+        }
+        return
+    }
 
     // Clear error automatically after short delay
     LaunchedEffect(isError) {
@@ -620,6 +643,58 @@ fun LockOverlayScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** The screen selected for a locked app while the disguise option is enabled. */
+enum class FakeScreenKind { CRASH, EMPTY_ALBUM, CALCULATOR }
+
+@Composable
+private fun FakeCrashDisguise(appName: String, onDismiss: () -> Unit, onRevealLock: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color(0xFF0B0F19)),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp), color = Color(0xFF1E293B),
+            modifier = Modifier.fillMaxWidth(0.88f).padding(16.dp)
+        ) {
+            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = NeonRed, modifier = Modifier.size(38.dp))
+                Spacer(Modifier.height(16.dp))
+                Text("애플리케이션 오류", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("'$appName' 앱의 작동이 중지되었습니다.", color = TextSecondary, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
+                        detectTapGestures(onTap = { onDismiss() }, onLongPress = { onRevealLock() })
+                    }
+                ) { Text("확인") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyAlbumDisguise(appName: String, onRevealLock: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().background(Color(0xFF101114)).pointerInput(Unit) {
+            detectTapGestures(onLongPress = { onRevealLock() })
+        }.padding(20.dp)
+    ) {
+        Text(appName, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(28.dp))
+        Text("앨범", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(16.dp))
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("▧", color = Color(0xFF8E939B), fontSize = 48.sp)
+                Spacer(Modifier.height(10.dp))
+                Text("사진이나 동영상이 없습니다", color = Color(0xFFB8BBC1), fontSize = 15.sp)
             }
         }
     }

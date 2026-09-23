@@ -5,6 +5,8 @@ import android.view.WindowManager
 import android.widget.Toast
 import android.app.AlertDialog
 import android.content.ComponentName
+import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.provider.Settings
 import android.text.InputType
@@ -32,6 +34,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.example.model.AppItem
 import com.example.model.IntruderLog
 import com.example.service.AppLockMonitoringService
@@ -46,9 +49,14 @@ import com.example.util.AppLockPreferences
 import com.example.util.InstalledAppsManager
 import com.example.util.IntruderCameraHelper
 import com.example.util.EncryptedBackupManager
+import com.example.util.AppUpdate
+import com.example.util.AppUpdateManager
 import com.example.util.IntruderPhotoExporter
 import com.example.util.PanicShakeDetector
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 class MainActivity : FragmentActivity() {
     fun showDuressPinSetup() {
@@ -106,6 +114,7 @@ class MainActivity : FragmentActivity() {
             }
         }
         if (!getSharedPreferences("backup_ui", MODE_PRIVATE).getBoolean("tutorial_seen", false)) showBackupTutorial()
+        checkForAppUpdate()
     }
 
     private fun showBackupTutorial() = AlertDialog.Builder(this)
@@ -134,6 +143,71 @@ class MainActivity : FragmentActivity() {
                     .onSuccess { getSharedPreferences("backup_ui", MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply(); recreate() }
                     .onFailure { Toast.makeText(this, "복원 실패: 비밀번호 또는 파일을 확인하세요.", Toast.LENGTH_LONG).show() } }
             }.setNegativeButton("취소", null).show()
+    }
+
+    private fun checkForAppUpdate() {
+        lifecycleScope.launch {
+            val update = withContext(Dispatchers.IO) { runCatching { AppUpdateManager.check() }.getOrNull() }
+            if (update != null && update.versionCode > BuildConfig.VERSION_CODE) showUpdateAvailable(update)
+        }
+    }
+
+    private fun showUpdateAvailable(update: AppUpdate) {
+        val message = buildString {
+            append("새 버전 ${update.versionName}을(를) 사용할 수 있습니다.\n\n")
+            append("설치 전에 백업을 한 번 내보내는 것을 권장합니다. 같은 서명으로 빌드한 APK면 기존 데이터는 유지됩니다.")
+            if (update.notes.isNotBlank()) append("\n\n${update.notes}")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("새 업데이트")
+            .setMessage(message)
+            .setPositiveButton("다운로드") { _, _ -> downloadUpdate(update) }
+            .setNeutralButton("백업 먼저") { _, _ -> showBackupActions() }
+            .setNegativeButton("나중에", null)
+            .show()
+    }
+
+    private fun downloadUpdate(update: AppUpdate) {
+        Toast.makeText(this, "업데이트 다운로드를 시작합니다.", Toast.LENGTH_SHORT).show()
+        val id = runCatching { AppUpdateManager.download(this, update) }.getOrElse {
+            Toast.makeText(this, "다운로드를 시작하지 못했습니다.", Toast.LENGTH_LONG).show(); return
+        }
+        lifecycleScope.launch {
+            var apkUri: Uri? = null
+            withContext(Dispatchers.IO) {
+                repeat(720) { // up to about 12 minutes, without blocking the UI
+                    apkUri = AppUpdateManager.downloadedApkUri(this@MainActivity, id)
+                    if (apkUri != null) return@withContext
+                    delay(1_000)
+                }
+            }
+            if (apkUri != null) showInstallUpdate(apkUri!!) else Toast.makeText(this@MainActivity, "업데이트 다운로드가 완료되지 않았습니다.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showInstallUpdate(apkUri: Uri) {
+        AlertDialog.Builder(this)
+            .setTitle("다운로드 완료")
+            .setMessage("업데이트 파일을 받았습니다. 백업을 확인한 뒤 지금 업데이트할까요? Android의 설치 확인 화면이 열립니다.")
+            .setPositiveButton("업데이트") { _, _ -> launchPackageInstaller(apkUri) }
+            .setNeutralButton("백업 먼저") { _, _ -> showBackupActions() }
+            .setNegativeButton("나중에", null)
+            .show()
+    }
+
+    private fun launchPackageInstaller(apkUri: Uri) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            Toast.makeText(this, "이 출처의 앱 설치를 허용한 뒤 다시 업데이트를 눌러 주세요.", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            return
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(apkUri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { startActivity(intent) }.onFailure {
+            Toast.makeText(this, "설치 화면을 열 수 없습니다.", Toast.LENGTH_LONG).show()
+        }
     }
 }
 

@@ -20,6 +20,7 @@ import androidx.fragment.app.FragmentActivity
 import com.example.service.AppLockAccessibilityService
 import com.example.service.PrivacyShadeOverlayService
 import com.example.ui.screens.LockOverlayScreen
+import com.example.ui.screens.FakeScreenKind
 import com.example.ui.theme.MyApplicationTheme
 import com.example.util.AppLockPreferences
 import com.example.util.BiometricHelper
@@ -125,6 +126,7 @@ class LockActivity : FragmentActivity() {
                     biometricEnabled = lockConfig.biometricEnabled,
                     isStealthPattern = lockConfig.isStealthPattern,
                     isFakeCrashEnabled = lockConfig.isFakeCrashEnabled,
+                    fakeScreenKind = fakeScreenKindFor(targetPackage, appName),
                     isVibrationEnabled = lockConfig.isVibrationEnabled,
                     isRandomPinKeypad = lockConfig.isRandomPinKeypad,
                     isIntruderSirenEnabled = lockConfig.isIntruderSirenEnabled,
@@ -301,5 +303,19 @@ class LockActivity : FragmentActivity() {
             } catch (_: Exception) {}
         }
         finish()
+    }
+
+    /**
+     * Per-app disguises are deliberately chosen locally: no app names or package
+     * information leave the device.  The checks cover the usual package/name forms
+     * while still leaving every other protected app on the crash disguise.
+     */
+    private fun fakeScreenKindFor(pkg: String, label: String): FakeScreenKind {
+        val key = "$pkg $label".lowercase()
+        return when {
+            listOf("gallery", "album", "photos", "사진", "갤러리").any(key::contains) -> FakeScreenKind.EMPTY_ALBUM
+            listOf("bank", "banking", "finance", "card", "은행", "금융", "카드").any(key::contains) -> FakeScreenKind.CALCULATOR
+            else -> FakeScreenKind.CRASH // KakaoTalk and other apps use the error screen.
+        }
     }
 }
