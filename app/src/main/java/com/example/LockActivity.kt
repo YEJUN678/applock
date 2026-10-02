@@ -6,6 +6,10 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.addCallback
@@ -15,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import com.example.service.AppLockAccessibilityService
@@ -25,6 +30,11 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.util.AppLockPreferences
 import com.example.util.BiometricHelper
 import com.example.util.BiometricStatus
+import com.example.util.BehavioralGuard
+import com.example.util.BehavioralGuardResult
+import com.example.util.BehavioralInputMetrics
+import com.example.util.AiGuardAudioRecorder
+import com.example.model.AiGuardFallback
 import com.example.util.InstalledAppsManager
 import com.example.util.IntruderCameraHelper
 import com.example.util.LockNotificationHelper
@@ -58,6 +68,17 @@ class LockActivity : FragmentActivity() {
     private var targetPackage by mutableStateOf("")
     private var appName by mutableStateOf("보호된 앱")
     private var appIcon by mutableStateOf<Drawable?>(null)
+    private var deviceTiltDegrees by mutableStateOf(0f)
+    private var additionalCredentialRequired by mutableStateOf(false)
+    private var sensorManager: SensorManager? = null
+    private val orientationListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            val x = event.values[0]; val y = event.values[1]; val z = event.values[2]
+            val gravity = kotlin.math.sqrt(x * x + y * y + z * z).coerceAtLeast(0.1f)
+            deviceTiltDegrees = Math.toDegrees(kotlin.math.acos((z / gravity).coerceIn(-1f, 1f)).toDouble()).toFloat()
+        }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+    }
 
     private fun completeUnlock() {
         AppLockPreferences.setDuressSession(this, false)
@@ -81,6 +102,10 @@ class LockActivity : FragmentActivity() {
 
         val initialPkg = intent.getStringExtra(EXTRA_PACKAGE_NAME) ?: ""
         updateTargetApp(initialPkg)
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
+            sensorManager?.registerListener(orientationListener, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
 
         // Handle Back Button: strictly block access to locked app and return to phone home screen
         onBackPressedDispatcher.addCallback(this) {
@@ -111,7 +136,7 @@ class LockActivity : FragmentActivity() {
                     }
                 }
 
-                LockOverlayScreen(
+                key(additionalCredentialRequired) { LockOverlayScreen(
                     appName = appName,
                     appIcon = appIcon,
                     lockType = lockConfig.lockType,
@@ -135,6 +160,7 @@ class LockActivity : FragmentActivity() {
                     isVibrationEnabled = lockConfig.isVibrationEnabled,
                     isRandomPinKeypad = lockConfig.isRandomPinKeypad,
                     isIntruderSirenEnabled = lockConfig.isIntruderSirenEnabled,
+                    deviceTiltDegrees = deviceTiltDegrees,
                     onRequestBiometric = {
                         requestBiometricUnlock(
                             appName = appName,
@@ -155,14 +181,29 @@ class LockActivity : FragmentActivity() {
                         completeUnlock()
                         Toast.makeText(this@LockActivity, "인증 성공!", Toast.LENGTH_SHORT).show()
                     },
+                    onCredentialVerified = { metrics ->
+                        if (additionalCredentialRequired) {
+                            completeUnlock()
+                            Toast.makeText(this@LockActivity, "추가 인증 성공!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            handleCredentialVerification(lockConfig, metrics)
+                        }
+                    },
                     onDuressUnlock = {
                         AppLockPreferences.setDuressSession(this@LockActivity, true)
                         AppLockPreferences.resetAllTemporaryUnlocks()
-                        if (targetPackage.isNotEmpty()) AppLockPreferences.setTemporarilyUnlocked(targetPackage)
                         PrivacyShadeOverlayService.start(this@LockActivity)
                         AppLockPreferences.recordIntruderAttempt(this@LockActivity, targetPackage, appName, 1, "듀레스 PIN")
-                        if (targetPackage.isNotEmpty() && targetPackage != packageName) InstalledAppsManager.launchApp(this@LockActivity, targetPackage)
-                        finish()
+                        if (targetPackage == packageName) {
+                            startActivity(Intent(this@LockActivity, DisguisedEntryActivity::class.java).apply {
+                                putExtra(DisguisedEntryActivity.EXTRA_SHOW_CALCULATOR, true)
+                                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                            })
+                            finish()
+                        } else {
+                            // A duress PIN must never grant access to another protected app.
+                            goToHomeScreen()
+                        }
                     },
                     onFailedAttempt = { attempts ->
                         recordFailedIntruderAttempt(
@@ -175,10 +216,53 @@ class LockActivity : FragmentActivity() {
                         goToHomeScreen()
                     },
                     modifier = Modifier.fillMaxSize()
-                )
+                ) }
 
             }
         }
+    }
+
+    private fun handleCredentialVerification(lockConfig: com.example.model.LockConfig, metrics: BehavioralInputMetrics) {
+        if (!lockConfig.isAiGuardEnabled) {
+            completeUnlock()
+            Toast.makeText(this, "인증 성공!", Toast.LENGTH_SHORT).show()
+            return
+        }
+        when (BehavioralGuard.evaluateAndLearn(this, metrics, lockConfig.aiGuardSensitivity)) {
+            BehavioralGuardResult.ADDITIONAL_AUTH_REQUIRED -> {
+                Toast.makeText(this, "AI 가드가 평소와 다른 입력 패턴을 감지했습니다. 추가 인증이 필요합니다.", Toast.LENGTH_LONG).show()
+                if (lockConfig.isAiGuardVoiceRecordingEnabled) AiGuardAudioRecorder.recordFiveSeconds(this)
+                when (lockConfig.aiGuardFallback) {
+                    AiGuardFallback.DEVICE_CREDENTIAL -> BiometricHelper.authenticateDeviceCredential(this, onSuccess = {
+                        completeUnlock()
+                        Toast.makeText(this, "기기 인증 성공!", Toast.LENGTH_SHORT).show()
+                    }, onUnavailable = { requireAppLockReentry() })
+                    AiGuardFallback.BIOMETRIC -> requestBiometricUnlock(appName, onSuccess = {
+                        completeUnlock()
+                        Toast.makeText(this, "추가 인증 성공!", Toast.LENGTH_SHORT).show()
+                    }, onFailed = { requireAppLockReentry() })
+                    AiGuardFallback.REENTER_APP_LOCK -> requireAppLockReentry()
+                }
+            }
+            BehavioralGuardResult.LEARNING -> {
+                completeUnlock()
+                Toast.makeText(this, "AI 가드가 정상 입력 패턴을 학습 중입니다.", Toast.LENGTH_SHORT).show()
+            }
+            BehavioralGuardResult.TRUSTED -> {
+                completeUnlock()
+                Toast.makeText(this, "AI 가드 인증 성공!", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun requireAppLockReentry() {
+        additionalCredentialRequired = true
+        Toast.makeText(this, "AI 가드 추가 인증: 잠금 정보를 한 번 더 입력하세요.", Toast.LENGTH_LONG).show()
+    }
+
+    override fun onDestroy() {
+        sensorManager?.unregisterListener(orientationListener)
+        super.onDestroy()
     }
 
     private fun requestBiometricUnlock(
@@ -218,31 +302,34 @@ class LockActivity : FragmentActivity() {
     }
 
     private fun recordFailedIntruderAttempt(lockConfig: com.example.model.LockConfig, attempts: Int, usedType: String) {
-        if (attempts >= lockConfig.intruderSelfieThreshold && targetPackage.isNotEmpty()) {
-            if (lockConfig.isIntruderSelfieEnabled) {
-                IntruderCameraHelper.captureIntruderSelfie(
-                    context = this@LockActivity,
-                    lifecycleOwner = this@LockActivity
-                ) { photoPath ->
+        // Evidence capture is independent of AI Guard: the first wrong credential can
+        // create a short local audio/video record when the required permissions exist.
+        if (attempts == 1 && targetPackage.isNotEmpty()) {
+            if (lockConfig.isAiGuardVoiceRecordingEnabled) AiGuardAudioRecorder.recordFiveSeconds(this)
+            IntruderCameraHelper.captureIntruderVideo(this, this) { videoPath ->
+                videoPath?.let {
                     AppLockPreferences.recordIntruderAttempt(
                         context = this@LockActivity,
                         packageName = targetPackage,
                         appName = appName,
                         attempts = attempts,
-                        usedLockType = usedType,
-                        photoPath = photoPath
+                        usedLockType = "$usedType · 5초 영상",
+                        videoPath = it
                     )
                 }
-            } else {
-                AppLockPreferences.recordIntruderAttempt(
-                    context = this@LockActivity,
-                    packageName = targetPackage,
-                    appName = appName,
-                    attempts = attempts,
-                    usedLockType = usedType,
-                    photoPath = null
-                )
+                recordPhotoEvidence(lockConfig, attempts, usedType)
             }
+        } else recordPhotoEvidence(lockConfig, attempts, usedType)
+    }
+
+    private fun recordPhotoEvidence(lockConfig: com.example.model.LockConfig, attempts: Int, usedType: String) {
+        if (attempts < lockConfig.intruderSelfieThreshold || targetPackage.isEmpty()) return
+        if (lockConfig.isIntruderSelfieEnabled) {
+            IntruderCameraHelper.captureIntruderSelfie(this@LockActivity, this@LockActivity) { photoPath ->
+                AppLockPreferences.recordIntruderAttempt(this@LockActivity, targetPackage, appName, attempts, usedType, photoPath = photoPath)
+            }
+        } else {
+            AppLockPreferences.recordIntruderAttempt(this@LockActivity, targetPackage, appName, attempts, usedType)
         }
     }
 

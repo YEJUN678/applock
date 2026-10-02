@@ -73,6 +73,7 @@ import com.example.ui.theme.NeonPurple
 import com.example.ui.theme.NeonRed
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.util.BehavioralInputMetrics
 import kotlinx.coroutines.delay
 
 @Composable
@@ -100,8 +101,10 @@ fun LockOverlayScreen(
     isVibrationEnabled: Boolean = true,
     isRandomPinKeypad: Boolean = false,
     isIntruderSirenEnabled: Boolean = false,
+    deviceTiltDegrees: Float = 0f,
     onRequestBiometric: (() -> Unit)? = null,
     onUnlockSuccess: () -> Unit,
+    onCredentialVerified: ((BehavioralInputMetrics) -> Unit)? = null,
     onDuressUnlock: (() -> Unit)? = null,
     onFailedAttempt: ((Int) -> Unit)? = null,
     onDismiss: () -> Unit,
@@ -136,6 +139,7 @@ fun LockOverlayScreen(
                 onCodeSubmitted = { enteredCode -> if (enteredCode == targetCalculatorCode) showFakeCrash = false },
                 modifier = modifier.fillMaxSize()
             )
+            FakeScreenKind.MAINTENANCE -> MaintenanceDisguise(appName = appName, onRevealLock = { showFakeCrash = false })
             FakeScreenKind.CRASH -> FakeCrashDisguise(
                 appName = appName,
                 onDismiss = onDismiss,
@@ -298,11 +302,11 @@ fun LockOverlayScreen(
                         enabled = !isError,
                         isScrambleKeypad = isRandomPinKeypad,
                         isVibrationEnabled = isVibrationEnabled,
-                        onPinCompleted = { enteredPin ->
+                        onPinCompleted = { enteredPin, metrics ->
                             if (targetDuressPin.isNotBlank() && enteredPin == targetDuressPin) {
                                 onDuressUnlock?.invoke()
                             } else if (enteredPin == targetPin) {
-                                onUnlockSuccess()
+                                onCredentialVerified?.invoke(metrics.copy(deviceTiltDegrees = deviceTiltDegrees)) ?: onUnlockSuccess()
                             } else {
                                 isError = true
                                 attemptCount++
@@ -351,9 +355,9 @@ fun LockOverlayScreen(
                         isError = isError,
                         enabled = !isError,
                         isVibrationEnabled = isVibrationEnabled,
-                        onPasswordSubmitted = { enteredPassword ->
+                        onPasswordSubmitted = { enteredPassword, metrics ->
                             if (enteredPassword == targetPassword) {
-                                onUnlockSuccess()
+                                onCredentialVerified?.invoke(metrics.copy(deviceTiltDegrees = deviceTiltDegrees)) ?: onUnlockSuccess()
                             } else {
                                 isError = true
                                 attemptCount++
@@ -659,7 +663,7 @@ fun LockOverlayScreen(
 }
 
 /** The screen selected for a locked app while the disguise option is enabled. */
-enum class FakeScreenKind { CRASH, EMPTY_ALBUM, CALCULATOR }
+enum class FakeScreenKind { CRASH, EMPTY_ALBUM, CALCULATOR, MAINTENANCE }
 
 @Composable
 private fun FakeCrashDisguise(appName: String, onDismiss: () -> Unit, onRevealLock: () -> Unit) {
@@ -679,7 +683,7 @@ private fun FakeCrashDisguise(appName: String, onDismiss: () -> Unit, onRevealLo
                 Text("'$appName' 앱의 작동이 중지되었습니다.", color = TextSecondary, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = onDismiss,
+                    onClick = {},
                     modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
                         detectTapGestures(onTap = { onDismiss() }, onLongPress = { onRevealLock() })
                     }
@@ -707,5 +711,22 @@ private fun EmptyAlbumDisguise(appName: String, onRevealLock: () -> Unit) {
                 Text("사진이나 동영상이 없습니다", color = Color(0xFFB8BBC1), fontSize = 15.sp)
             }
         }
+    }
+}
+
+@Composable
+private fun MaintenanceDisguise(appName: String, onRevealLock: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().background(Color(0xFFF8FAFC)).pointerInput(Unit) {
+            detectTapGestures(onLongPress = { onRevealLock() })
+        }.padding(28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.Settings, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(44.dp))
+        Spacer(Modifier.height(18.dp))
+        Text("서비스 점검 중", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontSize = 21.sp)
+        Spacer(Modifier.height(8.dp))
+        Text("$appName 서비스를 잠시 점검하고 있습니다.\n잠시 후 다시 이용해 주세요.", color = Color(0xFF64748B), textAlign = TextAlign.Center, fontSize = 14.sp)
     }
 }

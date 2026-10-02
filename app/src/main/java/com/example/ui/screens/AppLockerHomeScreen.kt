@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.util.BiometricHelper
@@ -78,6 +79,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -103,6 +105,11 @@ import com.example.model.BackgroundTheme
 import com.example.model.IntruderLog
 import com.example.model.LockConfig
 import com.example.model.LockType
+import com.example.model.AiGuardFallback
+import com.example.util.BehavioralGuard
+import android.widget.Toast
+import android.widget.VideoView
+import android.net.Uri
 import com.example.ui.components.AppItemCard
 import com.example.ui.components.BatchTimeoutDialog
 import com.example.ui.components.ChangeCalculatorCodeModal
@@ -176,6 +183,7 @@ fun AppLockerHomeScreen(
     onToggleNotificationPrivacy: (Boolean) -> Unit = {},
     isFaceDownProtectionEnabled: Boolean = false,
     onToggleFaceDownProtection: (Boolean) -> Unit = {},
+    onRequestAiGuardAudioPermission: () -> Unit = {},
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -848,6 +856,24 @@ fun AppLockerHomeScreen(
                             onToggleRandomPin = {
                                 onLockConfigChanged(lockConfig.copy(isRandomPinKeypad = it))
                             },
+                            onToggleAiGuard = {
+                                onLockConfigChanged(lockConfig.copy(isAiGuardEnabled = it))
+                            },
+                            onChangeAiGuardSensitivity = {
+                                onLockConfigChanged(lockConfig.copy(aiGuardSensitivity = it))
+                            },
+                            onChangeAiGuardFallback = {
+                                onLockConfigChanged(lockConfig.copy(aiGuardFallback = it))
+                            },
+                            onToggleAiGuardVoiceRecording = {
+                                onLockConfigChanged(lockConfig.copy(isAiGuardVoiceRecordingEnabled = it))
+                                if (it) onRequestAiGuardAudioPermission()
+                            },
+                            onRequestAiGuardAudioPermission = onRequestAiGuardAudioPermission,
+                            onResetAiGuardLearning = {
+                                BehavioralGuard.reset(context)
+                                Toast.makeText(context, "AI 가드 학습 데이터를 초기화했습니다.", Toast.LENGTH_SHORT).show()
+                            },
                             onToggleIntruderSiren = {
                                 onLockConfigChanged(lockConfig.copy(isIntruderSirenEnabled = it))
                             },
@@ -1007,14 +1033,37 @@ fun SettingsView(
     isFaceDownProtectionEnabled: Boolean = false,
     onToggleFaceDownProtection: (Boolean) -> Unit = {},
     onToggleRandomPin: (Boolean) -> Unit = {},
+    onToggleAiGuard: (Boolean) -> Unit = {},
+    onChangeAiGuardSensitivity: (Int) -> Unit = {},
+    onChangeAiGuardFallback: (AiGuardFallback) -> Unit = {},
+    onToggleAiGuardVoiceRecording: (Boolean) -> Unit = {},
+    onResetAiGuardLearning: () -> Unit = {},
+    onRequestAiGuardAudioPermission: () -> Unit = {},
     onToggleIntruderSiren: (Boolean) -> Unit = {},
     onTogglePanicShake: (Boolean) -> Unit = {}
 ) {
+    var settingSearchQuery by remember { mutableStateOf("") }
+    val settingNames = remember {
+        listOf("AI 가드 이상 행동 감지", "음성 기록", "침입자 사진 및 영상", "생체 인식", "PIN 키패드", "잠금 방식", "재잠금 시간", "가짜 오류 화면", "위장 아이콘", "사생활 필름", "Lost Mode", "앱 자체 보호", "알림 숨김", "화면 꺼짐 잠금", "백업 및 복원")
+    }
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxSize()
     ) {
+        item {
+            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = CyberSurfaceDark), border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("설정 찾기", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = settingSearchQuery, onValueChange = { settingSearchQuery = it }, singleLine = true, placeholder = { Text("예: AI, 영상, 잠금, 위장") }, leadingIcon = { Icon(Icons.Default.Search, null, tint = NeonCyan) }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonCyan, unfocusedBorderColor = CyberBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary), modifier = Modifier.fillMaxWidth())
+                    if (settingSearchQuery.isNotBlank()) {
+                        val matches = settingNames.filter { it.contains(settingSearchQuery, ignoreCase = true) }
+                        Text(if (matches.isEmpty()) "일치하는 설정이 없습니다" else "결과: ${matches.joinToString(" · ")}", color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+            }
+        }
         item {
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = CyberCardDark), border = androidx.compose.foundation.BorderStroke(1.dp, if (isLostModeActive) NeonRed else CyberBorder), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1441,6 +1490,58 @@ fun SettingsView(
         }
 
         // 3.8 Feature: Intruder Alarm Siren
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (lockConfig.isAiGuardEnabled) NeonPurple else CyberBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Security, contentDescription = null, tint = NeonPurple)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("AI 가드 · 이상 행동 감지", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text("PIN·문자 비밀번호의 입력 속도·간격·터치 압력·기기 각도를 기기 안에서만 학습합니다. 패턴이 크게 다르면 추가 인증을 요청합니다.", color = TextSecondary, fontSize = 12.sp)
+                            }
+                        }
+                        Switch(checked = lockConfig.isAiGuardEnabled, onCheckedChange = onToggleAiGuard, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = NeonPurple))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("비밀번호 1회 실패 시 5초 음성 기록", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("AI 가드와 관계없이 작동합니다. 마이크 권한이 필요하며, 최대 10개 파일을 기기 내부에만 보관합니다.", color = TextSecondary, fontSize = 11.sp)
+                        }
+                        Switch(checked = lockConfig.isAiGuardVoiceRecordingEnabled, onCheckedChange = onToggleAiGuardVoiceRecording, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = NeonRed))
+                    }
+                    if (lockConfig.isAiGuardEnabled) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("감지 민감도", color = TextSecondary, fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf(1 to "낮음", 2 to "보통", 3 to "높음").forEach { (value, label) ->
+                                FilterChip(selected = lockConfig.aiGuardSensitivity == value, onClick = { onChangeAiGuardSensitivity(value) }, label = { Text(label) }, modifier = Modifier.weight(1f), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonPurple, selectedLabelColor = Color.White))
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("이상 감지 시 추가 인증", color = TextSecondary, fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                            AiGuardFallback.entries.forEach { fallback ->
+                                FilterChip(selected = lockConfig.aiGuardFallback == fallback, onClick = { onChangeAiGuardFallback(fallback) }, label = { Text(fallback.title, fontSize = 10.sp) }, modifier = Modifier.weight(1f), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonPurple, selectedLabelColor = Color.White))
+                            }
+                        }
+                        OutlinedButton(onClick = onResetAiGuardLearning, shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, tint = NeonAmber, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("AI 가드 학습 데이터 초기화 · 재학습", color = NeonAmber, fontSize = 12.sp)
+                        }
+                        Text("처음 5회 정상 인증은 기준 학습에 사용됩니다. 비밀번호 내용이나 원본 터치 기록은 저장하지 않습니다.", color = TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+            }
+        }
+
         item {
             Card(
                 shape = RoundedCornerShape(18.dp),
@@ -2352,8 +2453,11 @@ fun IntruderSelfieVaultView(
     }
     var viewingPhotoLog by remember { mutableStateOf<IntruderLog?>(null) }
     var showDeleteAllConfirm by remember { mutableStateOf(false) }
+    var mediaTab by remember { mutableIntStateOf(0) }
 
     val photoLogsCount = remember(logs) { logs.count { it.photoPath != null } }
+    val videoLogsCount = remember(logs) { logs.count { it.videoPath != null } }
+    val visibleLogs = if (mediaTab == 0) logs.filter { it.photoPath != null } else logs.filter { it.videoPath != null }
 
     Column(
         modifier = Modifier
@@ -2391,13 +2495,13 @@ fun IntruderSelfieVaultView(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "침입자 셀카 보관함",
+                                text = "침입 증거 보관함",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
                             )
                             Text(
-                                text = "사진 ${photoLogsCount}장 / 시도 ${logs.size}건",
+                                text = "사진 ${photoLogsCount}장 · 영상 ${videoLogsCount}개 / 시도 ${logs.size}건",
                                 color = NeonRed,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -2582,18 +2686,24 @@ fun IntruderSelfieVaultView(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            FilterChip(selected = mediaTab == 0, onClick = { mediaTab = 0 }, label = { Text("사진 ($photoLogsCount)") }, modifier = Modifier.weight(1f), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonRed, selectedLabelColor = Color.White))
+            FilterChip(selected = mediaTab == 1, onClick = { mediaTab = 1 }, label = { Text("동영상 ($videoLogsCount)") }, modifier = Modifier.weight(1f), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonPurple, selectedLabelColor = Color.White))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
         // 4. Intruder Cards List or Empty View
-        if (logs.isEmpty()) {
+        if (visibleLogs.isEmpty()) {
             EmptyAppsView(
-                title = "촬영된 침입자가 없습니다",
-                desc = "다른 사람이 내 폰에서 잠긴 앱의 비밀번호나 패턴을 틀리면, 전면 카메라로 침입자의 얼굴을 몰래 캡처하여 여기에 사진으로 보관합니다.\n\n위 '전면 카메라 테스트 촬영' 버튼을 눌러 지금 테스트해볼 수 있습니다!"
+                title = if (mediaTab == 0) "촬영된 침입자 사진이 없습니다" else "새로 녹화된 침입자 영상이 없습니다",
+                desc = if (mediaTab == 0) "인증 실패 시 촬영된 사진이 여기에 표시됩니다." else "비밀번호를 한 번 틀리면 5초 영상이 자동 녹화되어 여기에 표시됩니다."
             )
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(logs, key = { it.id }) { log ->
+                items(visibleLogs, key = { it.id }) { log ->
                     Card(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = CyberCardDark),
@@ -2607,8 +2717,8 @@ fun IntruderSelfieVaultView(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(12.dp)
                         ) {
-                            // Photo Thumbnail
-                            if (log.photoPath != null) {
+                            // Media thumbnail
+                            if (mediaTab == 0 && log.photoPath != null) {
                                 Box(
                                     modifier = Modifier
                                         .size(80.dp)
@@ -2643,6 +2753,13 @@ fun IntruderSelfieVaultView(
                                                 modifier = Modifier.size(14.dp)
                                             )
                                         }
+                                    }
+                                }
+                            } else if (mediaTab == 1 && log.videoPath != null) {
+                                Surface(shape = RoundedCornerShape(12.dp), color = NeonPurple.copy(alpha = 0.16f), modifier = Modifier.size(80.dp).clickable { viewingPhotoLog = log }) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text("▶", color = NeonPurple, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                                        Text("5초 영상", color = TextPrimary, fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
                                     }
                                 }
                             } else {
@@ -2773,7 +2890,7 @@ fun IntruderSelfieVaultView(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "침입자 포착 사진",
+                            text = if (log.videoPath != null && log.photoPath == null) "침입자 포착 영상" else "침입자 포착 사진",
                                 color = NeonRed,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
@@ -2791,7 +2908,7 @@ fun IntruderSelfieVaultView(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Big Photo Display
+                    // Photo/video player
                     if (log.photoPath != null) {
                         Box(
                             modifier = Modifier
@@ -2811,6 +2928,11 @@ fun IntruderSelfieVaultView(
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
+                    } else if (log.videoPath != null) {
+                        AndroidView(
+                            factory = { VideoView(it).apply { setVideoURI(Uri.fromFile(File(log.videoPath))); setOnPreparedListener { player -> player.isLooping = true; start() } } },
+                            modifier = Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(14.dp)).background(Color.Black)
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -2839,8 +2961,8 @@ fun IntruderSelfieVaultView(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         OutlinedButton(
-                            onClick = { log.photoPath?.let(onDownloadIntruderPhoto) },
-                            enabled = log.photoPath != null,
+                            onClick = { (log.photoPath ?: log.videoPath)?.let(onDownloadIntruderPhoto) },
+                            enabled = log.photoPath != null || log.videoPath != null,
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
                             border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
                             shape = RoundedCornerShape(10.dp),
@@ -2862,7 +2984,7 @@ fun IntruderSelfieVaultView(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("사진 삭제", fontSize = 12.sp)
+                            Text("기록 삭제", fontSize = 12.sp)
                         }
 
                         Button(

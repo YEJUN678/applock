@@ -19,8 +19,8 @@ android {
     targetSdk = 36
     // Keep this in sync with versions.txt. Android will reject an APK whose
     // versionCode is not higher than the installed build.
-    versionCode = 6
-    versionName = "6.0"
+    versionCode = 7
+    versionName = "7.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -85,6 +85,7 @@ dependencies {
   implementation(libs.androidx.biometric)
   implementation(libs.androidx.camera.camera2)
   implementation(libs.androidx.camera.core)
+  implementation("androidx.camera:camera-video:1.5.0")
   implementation(libs.androidx.camera.lifecycle)
   implementation(libs.androidx.camera.view)
   implementation(libs.androidx.compose.material.icons.core)

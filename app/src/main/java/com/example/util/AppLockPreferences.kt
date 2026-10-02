@@ -35,6 +35,10 @@ object AppLockPreferences {
     private const val KEY_INTRUDER_SELFIE_THRESHOLD = "intruder_selfie_threshold"
     private const val KEY_UNINSTALL_PROTECTION = "uninstall_protection_enabled"
     private const val KEY_RANDOM_PIN_KEYPAD = "random_pin_keypad_enabled"
+    private const val KEY_AI_GUARD = "ai_guard_enabled"
+    private const val KEY_AI_GUARD_SENSITIVITY = "ai_guard_sensitivity"
+    private const val KEY_AI_GUARD_FALLBACK = "ai_guard_fallback"
+    private const val KEY_AI_GUARD_VOICE_RECORDING = "ai_guard_voice_recording"
     private const val KEY_INTRUDER_SIREN = "intruder_siren_enabled"
     private const val KEY_PANIC_SHAKE = "panic_shake_enabled"
     private const val KEY_PANIC_SHAKE_STRENGTH = "panic_shake_strength"
@@ -269,6 +273,10 @@ object AppLockPreferences {
         val intruderThreshold = prefs.getInt(KEY_INTRUDER_SELFIE_THRESHOLD, 1)
         val uninstallProtection = prefs.getBoolean(KEY_UNINSTALL_PROTECTION, false)
         val randomPin = prefs.getBoolean(KEY_RANDOM_PIN_KEYPAD, false)
+        val aiGuard = prefs.getBoolean(KEY_AI_GUARD, false)
+        val aiGuardSensitivity = prefs.getInt(KEY_AI_GUARD_SENSITIVITY, 2).coerceIn(1, 3)
+        val aiGuardFallback = runCatching { com.example.model.AiGuardFallback.valueOf(prefs.getString(KEY_AI_GUARD_FALLBACK, com.example.model.AiGuardFallback.DEVICE_CREDENTIAL.name)!!) }.getOrDefault(com.example.model.AiGuardFallback.DEVICE_CREDENTIAL)
+        val aiGuardVoiceRecording = prefs.getBoolean(KEY_AI_GUARD_VOICE_RECORDING, false)
         val siren = prefs.getBoolean(KEY_INTRUDER_SIREN, false)
         val panicShake = prefs.getBoolean(KEY_PANIC_SHAKE, false)
         val panicShakeStrength = prefs.getInt(KEY_PANIC_SHAKE_STRENGTH, 10).coerceIn(1, 10)
@@ -303,6 +311,10 @@ object AppLockPreferences {
             intruderSelfieThreshold = intruderThreshold,
             isUninstallProtectionEnabled = uninstallProtection,
             isRandomPinKeypad = randomPin,
+            isAiGuardEnabled = aiGuard,
+            aiGuardSensitivity = aiGuardSensitivity,
+            aiGuardFallback = aiGuardFallback,
+            isAiGuardVoiceRecordingEnabled = aiGuardVoiceRecording,
             isIntruderSirenEnabled = siren,
             isPanicShakeEnabled = panicShake,
             panicShakeStrength = panicShakeStrength,
@@ -343,6 +355,10 @@ object AppLockPreferences {
             .putInt(KEY_INTRUDER_SELFIE_THRESHOLD, config.intruderSelfieThreshold)
             .putBoolean(KEY_UNINSTALL_PROTECTION, config.isUninstallProtectionEnabled)
             .putBoolean(KEY_RANDOM_PIN_KEYPAD, config.isRandomPinKeypad)
+            .putBoolean(KEY_AI_GUARD, config.isAiGuardEnabled)
+            .putInt(KEY_AI_GUARD_SENSITIVITY, config.aiGuardSensitivity.coerceIn(1, 3))
+            .putString(KEY_AI_GUARD_FALLBACK, config.aiGuardFallback.name)
+            .putBoolean(KEY_AI_GUARD_VOICE_RECORDING, config.isAiGuardVoiceRecordingEnabled)
             .putBoolean(KEY_INTRUDER_SIREN, config.isIntruderSirenEnabled)
             .putBoolean(KEY_PANIC_SHAKE, config.isPanicShakeEnabled)
             .putInt(KEY_PANIC_SHAKE_STRENGTH, config.panicShakeStrength.coerceIn(1, 10))
@@ -386,7 +402,8 @@ object AppLockPreferences {
                         timestamp = obj.getLong("timestamp"),
                         attemptCount = obj.getInt("attemptCount"),
                         usedLockType = obj.optString("usedLockType", "패턴"),
-                        photoPath = obj.optString("photoPath").takeIf { it.isNotEmpty() }
+                        photoPath = obj.optString("photoPath").takeIf { it.isNotEmpty() },
+                        videoPath = obj.optString("videoPath").takeIf { it.isNotEmpty() }
                     )
                 )
             }
@@ -400,7 +417,8 @@ object AppLockPreferences {
         appName: String,
         attempts: Int,
         usedLockType: String = "패턴",
-        photoPath: String? = null
+        photoPath: String? = null,
+        videoPath: String? = null
     ) {
         val logs = getIntruderLogs(context).toMutableList()
         val newLog = IntruderLog(
@@ -410,7 +428,8 @@ object AppLockPreferences {
             timestamp = System.currentTimeMillis(),
             attemptCount = attempts,
             usedLockType = usedLockType,
-            photoPath = photoPath
+            photoPath = photoPath,
+            videoPath = videoPath
         )
         logs.add(0, newLog)
         // Keep last 40 logs
@@ -426,6 +445,7 @@ object AppLockPreferences {
                     put("attemptCount", log.attemptCount)
                     put("usedLockType", log.usedLockType)
                     log.photoPath?.let { put("photoPath", it) }
+                    log.videoPath?.let { put("videoPath", it) }
                 }
                 jsonArray.put(obj)
             }
@@ -442,6 +462,7 @@ object AppLockPreferences {
                 if (file.exists()) file.delete()
             } catch (_: Exception) {}
         }
+        target?.videoPath?.let { path -> runCatching { java.io.File(path).delete() } }
         logs.removeAll { it.id == id }
         try {
             val jsonArray = JSONArray()
@@ -454,6 +475,7 @@ object AppLockPreferences {
                     put("attemptCount", log.attemptCount)
                     put("usedLockType", log.usedLockType)
                     log.photoPath?.let { put("photoPath", it) }
+                    log.videoPath?.let { put("videoPath", it) }
                 }
                 jsonArray.put(obj)
             }
@@ -468,6 +490,14 @@ object AppLockPreferences {
             if (dir.exists()) {
                 dir.listFiles()?.forEach { it.delete() }
             }
+        } catch (_: Exception) {}
+        try {
+            val dir = java.io.File(context.filesDir, "intruder_videos")
+            if (dir.exists()) dir.listFiles()?.forEach { it.delete() }
+        } catch (_: Exception) {}
+        try {
+            val dir = java.io.File(context.filesDir, "ai_guard_audio")
+            if (dir.exists()) dir.listFiles()?.forEach { it.delete() }
         } catch (_: Exception) {}
         getPrefs(context).edit().remove(KEY_INTRUDER_LOGS).apply()
     }

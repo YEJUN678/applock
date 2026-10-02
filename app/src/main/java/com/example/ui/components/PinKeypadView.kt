@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +50,7 @@ import com.example.ui.theme.NeonPurple
 import com.example.ui.theme.NeonRed
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.util.BehavioralInputMetrics
 
 @Composable
 fun PinKeypadView(
@@ -57,7 +59,7 @@ fun PinKeypadView(
     enabled: Boolean = true,
     isScrambleKeypad: Boolean = false,
     isVibrationEnabled: Boolean = true,
-    onPinCompleted: (String) -> Unit,
+    onPinCompleted: (String, BehavioralInputMetrics) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -72,11 +74,21 @@ fun PinKeypadView(
     }
 
     var currentPin by remember { mutableStateOf("") }
+    var firstInputAt by remember { mutableStateOf(0L) }
+    var previousInputAt by remember { mutableStateOf(0L) }
+    var intervalTotal by remember { mutableStateOf(0L) }
+    var intervalCount by remember { mutableStateOf(0) }
+    var pressureTotal by remember { mutableStateOf(0f) }
+    var pressureCount by remember { mutableStateOf(0) }
 
     // Clear entered digits when error triggered
     androidx.compose.runtime.LaunchedEffect(isError) {
         if (isError) {
             currentPin = ""
+            firstInputAt = 0L
+            previousInputAt = 0L
+            intervalTotal = 0L
+            intervalCount = 0
         }
     }
 
@@ -95,10 +107,22 @@ fun PinKeypadView(
     fun handleDigitPress(digit: String) {
         if (!enabled || currentPin.length >= targetLength) return
         triggerHaptic()
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (firstInputAt == 0L) firstInputAt = now
+        if (previousInputAt != 0L) {
+            intervalTotal += now - previousInputAt
+            intervalCount++
+        }
+        previousInputAt = now
         val newPin = currentPin + digit
         currentPin = newPin
         if (newPin.length == targetLength) {
-            onPinCompleted(newPin)
+            onPinCompleted(newPin, BehavioralInputMetrics(
+                durationMs = now - firstInputAt,
+                averageIntervalMs = if (intervalCount == 0) 0 else intervalTotal / intervalCount,
+                averagePressure = if (pressureCount == 0) 1f else pressureTotal / pressureCount,
+                deviceTiltDegrees = 0f
+            ))
         }
     }
 
@@ -111,6 +135,13 @@ fun PinKeypadView(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.fillMaxWidth()
+            .pointerInteropFilter { event ->
+                if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN || event.actionMasked == android.view.MotionEvent.ACTION_MOVE) {
+                    pressureTotal += event.pressure
+                    pressureCount++
+                }
+                false
+            }
     ) {
         // PIN Dots indicator
         Row(

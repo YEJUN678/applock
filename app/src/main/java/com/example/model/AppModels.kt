@@ -27,6 +27,12 @@ enum class BackgroundTheme(val title: String, val description: String) {
     MINIMAL_STEALTH("Minimal Stealth", "다크 매트 블랙 & 미니멀")
 }
 
+enum class AiGuardFallback(val title: String) {
+    DEVICE_CREDENTIAL("기기 화면 잠금"),
+    BIOMETRIC("생체 인식"),
+    REENTER_APP_LOCK("앱 잠금 다시 입력")
+}
+
 data class LockConfig(
     val lockType: LockType = LockType.PATTERN,
     val gridSize: Int = 3, // 3 to 10
@@ -50,6 +56,10 @@ data class LockConfig(
     val intruderSelfieThreshold: Int = 1, // 1, 2, or 3 failed attempts
     val isUninstallProtectionEnabled: Boolean = false, // Prevent unauthorized app uninstallation / deletion
     val isRandomPinKeypad: Boolean = false, // Shuffle PIN digits to prevent shoulder surfing
+    val isAiGuardEnabled: Boolean = false, // Local behavioral anomaly detection
+    val aiGuardSensitivity: Int = 2, // 1 low, 2 normal, 3 high
+    val aiGuardFallback: AiGuardFallback = AiGuardFallback.DEVICE_CREDENTIAL,
+    val isAiGuardVoiceRecordingEnabled: Boolean = false,
     val isIntruderSirenEnabled: Boolean = false, // Sound alert buzzer on intrusion attempts
     val isPanicShakeEnabled: Boolean = false, // Instantly lock all when phone is vigorously shaken
     val panicShakeStrength: Int = 10, // 1..10; 10 is maximum sensitivity
@@ -82,5 +92,6 @@ data class IntruderLog(
     val timestamp: Long,
     val attemptCount: Int,
     val usedLockType: String = "패턴",
-    val photoPath: String? = null
+    val photoPath: String? = null,
+    val videoPath: String? = null
 )

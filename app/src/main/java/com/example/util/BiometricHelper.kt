@@ -92,4 +92,18 @@ object BiometricHelper {
 
         prompt.authenticate(promptInfo)
     }
+
+    fun authenticateDeviceCredential(activity: FragmentActivity, onSuccess: () -> Unit, onUnavailable: () -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) { onUnavailable(); return }
+        val executor = ContextCompat.getMainExecutor(activity)
+        val prompt = BiometricPrompt(activity, executor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onSuccess()
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = onUnavailable()
+        })
+        prompt.authenticate(BiometricPrompt.PromptInfo.Builder()
+            .setTitle("AI 가드 추가 인증")
+            .setSubtitle("기기의 PIN, 패턴 또는 비밀번호로 본인 확인")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+            .build())
+    }
 }

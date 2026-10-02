@@ -14,7 +14,7 @@ object IntruderPhotoExporter {
         return try {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, "Intruder_${source.name}")
-                put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                put(MediaStore.MediaColumns.MIME_TYPE, if (source.extension.equals("mp4", true)) "video/mp4" else "image/jpeg")
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AppLock Intruder")
                     put(MediaStore.MediaColumns.IS_PENDING, 1)

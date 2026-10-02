@@ -12,6 +12,12 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import java.io.File
@@ -19,6 +25,8 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.os.Handler
+import android.os.Looper
 
 object IntruderCameraHelper {
     private const val TAG = "IntruderCameraHelper"
@@ -107,6 +115,39 @@ object IntruderCameraHelper {
                 onCaptured(samplePath)
             }
         }, mainExecutor)
+    }
+
+    /** Records a short, silent front-camera clip; no video leaves the device automatically. */
+    fun captureIntruderVideo(context: Context, lifecycleOwner: LifecycleOwner, onCaptured: (String?) -> Unit) {
+        if (!hasCameraPermission(context)) { onCaptured(null); return }
+        val future = ProcessCameraProvider.getInstance(context)
+        val executor = ContextCompat.getMainExecutor(context)
+        future.addListener({
+            try {
+                val provider = future.get()
+                val selector = when {
+                    provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) -> CameraSelector.DEFAULT_FRONT_CAMERA
+                    provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) -> CameraSelector.DEFAULT_BACK_CAMERA
+                    else -> { onCaptured(null); return@addListener }
+                }
+                val recorder = Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.SD)).build()
+                val capture = VideoCapture.withOutput(recorder)
+                provider.unbindAll()
+                provider.bindToLifecycle(lifecycleOwner, selector, capture)
+                val dir = File(context.filesDir, "intruder_videos").apply { mkdirs() }
+                val file = File(dir, "INTRUDER_${System.currentTimeMillis()}.mp4")
+                var delivered = false
+                val recording = recorder.prepareRecording(context, FileOutputOptions.Builder(file).build())
+                    .start(executor) { event ->
+                        if (event is VideoRecordEvent.Finalize) {
+                            if (!delivered) onCaptured(file.takeIf { it.isFile && it.length() > 0 }?.absolutePath)
+                            delivered = true
+                            runCatching { provider.unbindAll() }
+                        }
+                    }
+                Handler(Looper.getMainLooper()).postDelayed({ recording.stop() }, 5_000L)
+            } catch (_: Exception) { onCaptured(null) }
+        }, executor)
     }
 
     /**

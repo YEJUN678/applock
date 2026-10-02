@@ -51,21 +51,41 @@ import com.example.ui.theme.NeonPurple
 import com.example.ui.theme.NeonRed
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.util.BehavioralInputMetrics
 
 @Composable
 fun PasswordLockView(
     isError: Boolean = false,
     enabled: Boolean = true,
     isVibrationEnabled: Boolean = true,
-    onPasswordSubmitted: (String) -> Unit,
+    onPasswordSubmitted: (String, BehavioralInputMetrics) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var passwordText by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
+    var firstInputAt by remember { mutableStateOf(0L) }
+    var previousInputAt by remember { mutableStateOf(0L) }
+    var intervalTotal by remember { mutableStateOf(0L) }
+    var intervalCount by remember { mutableStateOf(0) }
+
+    fun submit() {
+        if (passwordText.isBlank()) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        onPasswordSubmitted(passwordText, BehavioralInputMetrics(
+            durationMs = (now - firstInputAt).coerceAtLeast(0),
+            averageIntervalMs = if (intervalCount == 0) 0 else intervalTotal / intervalCount,
+            averagePressure = 1f, // IME does not expose hardware touch pressure.
+            deviceTiltDegrees = 0f
+        ))
+    }
 
     LaunchedEffect(isError) {
         if (isError) {
             passwordText = ""
+            firstInputAt = 0L
+            previousInputAt = 0L
+            intervalTotal = 0L
+            intervalCount = 0
         }
     }
 
@@ -75,7 +95,17 @@ fun PasswordLockView(
     ) {
         OutlinedTextField(
             value = passwordText,
-            onValueChange = { if (enabled) passwordText = it },
+            onValueChange = {
+                if (enabled) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (it.length > passwordText.length) {
+                        if (firstInputAt == 0L) firstInputAt = now
+                        if (previousInputAt != 0L) { intervalTotal += now - previousInputAt; intervalCount++ }
+                        previousInputAt = now
+                    }
+                    passwordText = it
+                }
+            },
             enabled = enabled,
             singleLine = true,
             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -86,7 +116,7 @@ fun PasswordLockView(
             keyboardActions = KeyboardActions(
                 onDone = {
                     if (passwordText.isNotBlank()) {
-                        onPasswordSubmitted(passwordText)
+                        submit()
                     }
                 }
             ),
@@ -137,7 +167,7 @@ fun PasswordLockView(
         Button(
             onClick = {
                 if (passwordText.isNotBlank()) {
-                    onPasswordSubmitted(passwordText)
+                    submit()
                 }
             },
             enabled = enabled && passwordText.isNotBlank(),

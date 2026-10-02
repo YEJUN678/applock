@@ -79,7 +79,7 @@ fun ChangePinModal(
                 targetLength = 4,
                 isError = isError,
                 enabled = !isError,
-                onPinCompleted = { entered ->
+                onPinCompleted = { entered, _ ->
                     if (step == 1) {
                         firstEnteredPin = entered
                         step = 2

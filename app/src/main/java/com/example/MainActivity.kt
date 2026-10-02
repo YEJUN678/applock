@@ -76,6 +76,9 @@ class MainActivity : FragmentActivity() {
     private var pendingInstallerUri: Uri? = null
     private var incomingSharedUri by mutableStateOf<Uri?>(null)
     private var pendingLostModePackages: List<String>? = null
+    private val requestAiGuardAudioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        Toast.makeText(this, if (granted) "AI 가드 음성 기록 권한을 허용했습니다." else "마이크 권한이 없어 음성 기록은 실행되지 않습니다.", Toast.LENGTH_LONG).show()
+    }
     private val requestLostModeLocation = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         activateLostModeNow(pendingLostModePackages.orEmpty())
         pendingLostModePackages = null
@@ -203,8 +206,8 @@ class MainActivity : FragmentActivity() {
             .setItems(protected.map { it.name }.toTypedArray()) { _, index ->
                 val app = protected[index]
                 AlertDialog.Builder(this).setTitle("${app.name} 가짜 화면")
-                    .setItems(arrayOf("오류 화면", "빈 앨범", "계산기", "자동 추천", "설정 해제")) { _, choice ->
-                        val rule = when (choice) { 0 -> "CRASH"; 1 -> "EMPTY_ALBUM"; 2 -> "CALCULATOR"; else -> null }
+                    .setItems(arrayOf("오류 화면", "빈 앨범", "계산기", "서비스 점검", "자동 추천", "설정 해제")) { _, choice ->
+                        val rule = when (choice) { 0 -> "CRASH"; 1 -> "EMPTY_ALBUM"; 2 -> "CALCULATOR"; 3 -> "MAINTENANCE"; else -> null }
                         AppLockPreferences.setFakeScreenFor(this, app.packageName, rule)
                         Toast.makeText(this, if (rule == null) "${app.name}: 자동 추천으로 변경했습니다." else "${app.name} 가짜 화면을 저장했습니다.", Toast.LENGTH_SHORT).show()
                     }.show()
@@ -270,6 +273,11 @@ class MainActivity : FragmentActivity() {
             listOf(default, calculator, notes).filter { it != selected }.forEach { pm.setComponentEnabledSetting(it, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP) }
             Toast.makeText(this, "위장 아이콘을 적용했습니다. 홈 화면을 새로고침하면 반영됩니다.", Toast.LENGTH_LONG).show()
         }.show()
+    }
+    fun requestAiGuardAudioPermission() {
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestAiGuardAudioPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
     }
     private var pendingBackupPassword: CharArray? = null
     private var pendingRestoreUri: android.net.Uri? = null
@@ -691,8 +699,9 @@ fun AppLockerApp(
                     onShowToast("해당 침입자 기록이 삭제되었습니다.")
                 },
                 onDownloadIntruderPhoto = { path ->
-                    if (IntruderPhotoExporter.exportToDownloads(context, path)) onShowToast("침입자 사진을 Downloads/AppLock Intruder에 저장했습니다.")
-                    else onShowToast("사진을 저장하지 못했습니다.")
+                    val isVideo = path.endsWith(".mp4", ignoreCase = true)
+                    if (IntruderPhotoExporter.exportToDownloads(context, path)) onShowToast("침입자 ${if (isVideo) "영상" else "사진"}을 Downloads/AppLock Intruder에 저장했습니다.")
+                    else onShowToast("${if (isVideo) "영상" else "사진"}을 저장하지 못했습니다.")
                 },
                 onCaptureTestSelfie = {
                     IntruderCameraHelper.captureIntruderSelfie(
@@ -755,6 +764,7 @@ fun AppLockerApp(
                     }
                 },
                 onConfigureDisguise = { (context as? MainActivity)?.showLauncherDisguiseChooser() },
+                onRequestAiGuardAudioPermission = { (context as? MainActivity)?.requestAiGuardAudioPermission() },
                 onManageBackup = { (context as? MainActivity)?.showBackupActions() },
                 onShowRecoveryQr = { (context as? MainActivity)?.showRecoveryQr() },
                 onScanRecoveryQr = { (context as? MainActivity)?.scanRecoveryQr() },
