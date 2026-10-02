@@ -1,4 +1,4 @@
-versionCode=7
-versionName=7.0
-apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta8/app-debug.apk
-notes=AI 가드 · 이상 행동 감지- PIN·문자 비밀번호 입력 패턴 로컬 학습- 이상 감지 시 기기 잠금·생체 인식     ·App Lock 재입력 추가 인증 학습 데이터 초기화·재학습 및 민감도 설정      침입 감지 · 증거 기록\ 비밀번호 1회 실패 시 5초 음성·전면 카메라 영상 기록- 사진/동영상 탭, 앱 내 시청 및 Downloads 다운로드 지원- 전체 삭제 시 사진·영상·음성 함께 삭제듀레스 PIN · 위장 모드- 듀레스 PIN으로 다른 잠금 앱 접근 차단- App Lock에서만 계산기 위장 화면 전환- 오류·빈 앨범·계산기·서비스 점검 위장 화면 지원      설정 화면 개선- 설정 이름 검색 지원- AI 가드·음성 기록·추가 인증 설정 통합                           *가장 중요한거* : 서상희 뒤져라
+versionCode=9
+versionName=7.1
+apkUrl=https://github.com/YEJUN678/applock/releases/download/applockbeta8.1/app-debug.apk
+notes=AI 가드 · 이상 행동 감지- PIN·문자 비밀번호 입력 패턴 로컬 학습- 이상 감지 시 기기 잠금·생체 인식     ·App Lock 재입력 추가 인증 학습 데이터 초기화·재학습 및 민감도 설정      침입 감지 · 증거 기록\ 비밀번호 1회 실패 시 5초 음성·전면 카메라 영상 기록- 사진/동영상 탭, 앱 내 시청 및 Downloads 다운로드 지원- 전체 삭제 시 사진·영상·음성 함께 삭제듀레스 PIN · 위장 모드- 듀레스 PIN으로 다른 잠금 앱 접근 차단- App Lock에서만 계산기 위장 화면 전환- 오류·빈 앨범·계산기·서비스 점검 위장 화면 지원      설정 화면 개선- 설정 이름 검색 지원- AI 가드·음성 기록·추가 인증 설정 통합- 미끼 PIN 입력 시 실제 데이터 대신 가짜 보관함 표시- One UI 스타일의 실시간 잠금 화면 미리보기- 시계 스타일, 강조색, 아이콘 크기, 배경 어두움 편집                           *가장 중요한거* : 서상희 뒤져라
