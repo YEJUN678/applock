@@ -144,6 +144,7 @@ class LockActivity : FragmentActivity() {
                     targetPattern = lockConfig.savedPattern,
                     targetPin = lockConfig.savedPin,
                     targetDuressPin = AppLockPreferences.getDuressPin(this@LockActivity),
+                    targetDecoyPin = AppLockPreferences.getDecoyPin(this@LockActivity),
                     targetPassword = lockConfig.savedPassword,
                     targetCalculatorCode = lockConfig.savedCalculatorCode,
                     targetKnockCode = lockConfig.savedKnockCode,
@@ -153,6 +154,9 @@ class LockActivity : FragmentActivity() {
                     lockMessage = lockConfig.lockScreenMessage,
                     lockIconScale = lockConfig.lockIconScale,
                     lockBackgroundDim = lockConfig.lockBackgroundDim,
+                    lockClockStyle = lockConfig.lockClockStyle,
+                    lockAccent = lockConfig.lockAccent,
+                    isLockQuickActionsEnabled = lockConfig.isLockQuickActionsEnabled,
                     biometricEnabled = lockConfig.biometricEnabled,
                     isStealthPattern = lockConfig.isStealthPattern,
                     isFakeCrashEnabled = lockConfig.isFakeCrashEnabled,
@@ -204,6 +208,11 @@ class LockActivity : FragmentActivity() {
                             // A duress PIN must never grant access to another protected app.
                             goToHomeScreen()
                         }
+                    },
+                    onDecoyUnlock = {
+                        AppLockPreferences.recordIntruderAttempt(this@LockActivity, targetPackage, appName, 1, "미끼 PIN")
+                        startActivity(Intent(this@LockActivity, DecoyVaultActivity::class.java))
+                        finish()
                     },
                     onFailedAttempt = { attempts ->
                         recordFailedIntruderAttempt(
@@ -305,7 +314,13 @@ class LockActivity : FragmentActivity() {
         // Evidence capture is independent of AI Guard: the first wrong credential can
         // create a short local audio/video record when the required permissions exist.
         if (attempts == 1 && targetPackage.isNotEmpty()) {
-            if (lockConfig.isAiGuardVoiceRecordingEnabled) AiGuardAudioRecorder.recordFiveSeconds(this)
+            if (lockConfig.isAiGuardVoiceRecordingEnabled) {
+                AiGuardAudioRecorder.recordFiveSeconds(this) { audioPath ->
+                    audioPath?.let {
+                        AppLockPreferences.recordIntruderAttempt(this@LockActivity, targetPackage, appName, attempts, "$usedType · 5초 음성", audioPath = it)
+                    }
+                }
+            }
             IntruderCameraHelper.captureIntruderVideo(this, this) { videoPath ->
                 videoPath?.let {
                     AppLockPreferences.recordIntruderAttempt(

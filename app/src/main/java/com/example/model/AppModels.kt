@@ -33,6 +33,9 @@ enum class AiGuardFallback(val title: String) {
     REENTER_APP_LOCK("앱 잠금 다시 입력")
 }
 
+enum class LockClockStyle(val title: String) { LARGE("대형"), COMPACT("간결"), HIDDEN("숨김") }
+enum class LockAccent(val title: String, val hex: Long) { CYAN("시안", 0xFF00E5FF), PURPLE("보라", 0xFFB388FF), GREEN("그린", 0xFF69F0AE), AMBER("앰버", 0xFFFFD740) }
+
 data class LockConfig(
     val lockType: LockType = LockType.PATTERN,
     val gridSize: Int = 3, // 3 to 10
@@ -47,6 +50,9 @@ data class LockConfig(
     val lockScreenMessage: String = "",
     val lockIconScale: Float = 1f,
     val lockBackgroundDim: Float = 0.82f,
+    val lockClockStyle: LockClockStyle = LockClockStyle.LARGE,
+    val lockAccent: LockAccent = LockAccent.CYAN,
+    val isLockQuickActionsEnabled: Boolean = true,
     val lockTimeoutSeconds: Int = 30, // 0 = 즉시, 30 = 30초, 60 = 1분, 300 = 5분
     val isStealthPattern: Boolean = false, // Hide line while drawing pattern
     val isFakeCrashEnabled: Boolean = false, // Show fake crash dialog first
@@ -93,5 +99,6 @@ data class IntruderLog(
     val attemptCount: Int,
     val usedLockType: String = "패턴",
     val photoPath: String? = null,
-    val videoPath: String? = null
+    val videoPath: String? = null,
+    val audioPath: String? = null
 )

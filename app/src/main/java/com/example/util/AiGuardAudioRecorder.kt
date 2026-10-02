@@ -10,8 +10,8 @@ import java.io.File
 
 /** Captures a short local evidence clip only after an AI Guard anomaly. */
 object AiGuardAudioRecorder {
-    fun recordFiveSeconds(context: Context) {
-        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+    fun recordFiveSeconds(context: Context, onSaved: (String?) -> Unit = {}) {
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { onSaved(null); return }
         val folder = File(context.filesDir, "ai_guard_audio").apply { mkdirs() }
         folder.listFiles()?.sortedByDescending(File::lastModified)?.drop(9)?.forEach { it.delete() }
         val output = File(folder, "guard-${System.currentTimeMillis()}.m4a")
@@ -26,11 +26,13 @@ object AiGuardAudioRecorder {
             }
         } catch (_: Exception) {
             output.delete()
+            onSaved(null)
             return
         }
         Handler(Looper.getMainLooper()).postDelayed({
             runCatching { recorder.stop() }
             recorder.release()
+            onSaved(output.takeIf { it.isFile && it.length() > 0 }?.absolutePath)
         }, 5_000L)
     }
 }

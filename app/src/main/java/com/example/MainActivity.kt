@@ -46,6 +46,7 @@ import com.example.service.PrivacyShadeOverlayService
 import com.example.ui.components.PrivacyScreenFilter
 import com.example.ui.components.CalculatorDisguiseLockView
 import com.example.ui.components.UpdateInstallDialog
+import com.example.ui.components.LockScreenEditor
 import com.example.ui.screens.AppLockerHomeScreen
 import com.example.ui.screens.FileVaultScreen
 import com.example.ui.theme.MyApplicationTheme
@@ -184,11 +185,24 @@ class MainActivity : FragmentActivity() {
         pickLockBackground.launch(arrayOf("image/*"))
     }
     fun showDuressPinSetup() {
+        AlertDialog.Builder(this).setTitle("비상 · 미끼 PIN 설정")
+            .setItems(arrayOf("듀레스 PIN: 홈 화면·사생활 보호", "미끼 PIN: 가짜 금고 열기")) { _, mode ->
+                val isDecoy = mode == 1
+                showSpecialPinEditor(isDecoy)
+            }.setNegativeButton("취소", null).show()
+    }
+
+    private fun showSpecialPinEditor(isDecoy: Boolean) {
         val field = EditText(this).apply { inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "일반 PIN과 다른 4자리 PIN" }
-        AlertDialog.Builder(this).setTitle("듀레스 PIN 설정").setMessage("입력하면 사생활 필름·침입 기록·즉시 재잠금이 실행됩니다.").setView(field)
+        val title = if (isDecoy) "미끼 PIN 설정" else "듀레스 PIN 설정"
+        val message = if (isDecoy) "입력하면 실제 데이터 대신 비어 있는 가짜 금고가 열립니다." else "입력하면 사생활 필름·침입 기록·즉시 재잠금이 실행됩니다."
+        AlertDialog.Builder(this).setTitle(title).setMessage(message).setView(field)
             .setPositiveButton("저장") { _, _ ->
                 val pin = field.text.toString()
-                if (pin.length == 4 && pin != AppLockPreferences.getLockConfig(this).savedPin) { AppLockPreferences.setDuressPin(this, pin); Toast.makeText(this, "듀레스 PIN을 저장했습니다.", Toast.LENGTH_SHORT).show() }
+                if (pin.length == 4 && pin != AppLockPreferences.getLockConfig(this).savedPin) {
+                    if (isDecoy) AppLockPreferences.setDecoyPin(this, pin) else AppLockPreferences.setDuressPin(this, pin)
+                    Toast.makeText(this, if (isDecoy) "미끼 PIN을 저장했습니다." else "듀레스 PIN을 저장했습니다.", Toast.LENGTH_SHORT).show()
+                }
                 else Toast.makeText(this, "일반 PIN과 다른 4자리 숫자를 입력하세요.", Toast.LENGTH_LONG).show()
             }.setNegativeButton("취소", null).show()
     }
@@ -474,6 +488,7 @@ fun AppLockerApp(
     }
 
     var showVaultScreen by remember { mutableStateOf(false) }
+    var showLockScreenEditor by remember { mutableStateOf(false) }
     var isPrivacyFilterActive by remember { mutableStateOf(false) }
     var isDuressMode by remember { mutableStateOf(AppLockPreferences.isDuressSession(context)) }
     var faceDownProtectionEnabled by remember { mutableStateOf(AppLockPreferences.isFaceDownProtectionEnabled(context)) }
@@ -778,7 +793,7 @@ fun AppLockerApp(
                 },
                 onConfigureDuressPin = { (context as? MainActivity)?.showDuressPinSetup() },
                 onConfigureEmergencyContact = { (context as? MainActivity)?.showEmergencyContactSetup() },
-                onEditLockStyle = { (context as? MainActivity)?.showLockStyleEditor() },
+                onEditLockStyle = { showLockScreenEditor = true },
                 onToggleNotificationPrivacy = { enabled -> (context as? MainActivity)?.setNotificationPrivacy(enabled) },
                 isFaceDownProtectionEnabled = faceDownProtectionEnabled,
                 onToggleFaceDownProtection = { enabled ->
@@ -791,6 +806,18 @@ fun AppLockerApp(
         }
 
         // Privacy Shade Filter Overlay (엿보기 방지 화면 가림막)
+        if (showLockScreenEditor) {
+            LockScreenEditor(
+                config = lockConfig,
+                onDismiss = { showLockScreenEditor = false },
+                onSave = { updated ->
+                    lockConfig = updated
+                    AppLockPreferences.saveLockConfig(context, updated)
+                    showLockScreenEditor = false
+                    onShowToast("잠금 화면 스타일을 저장했습니다.")
+                }
+            )
+        }
         PrivacyScreenFilter(
             isActive = isPrivacyFilterActive,
             onClose = { isPrivacyFilterActive = false }

@@ -62,6 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.BackgroundTheme
 import com.example.model.LockType
+import com.example.model.LockAccent
+import com.example.model.LockClockStyle
 import com.example.ui.components.AppLockBackground
 import com.example.ui.components.CalculatorDisguiseLockView
 import com.example.ui.components.KnockCodeLockView
@@ -86,6 +88,7 @@ fun LockOverlayScreen(
     targetPattern: List<Int>,
     targetPin: String = "1234",
     targetDuressPin: String = "",
+    targetDecoyPin: String = "",
     targetPassword: String = "admin1234",
     targetCalculatorCode: String = "1234",
     targetKnockCode: List<Int> = listOf(1, 2, 3, 4),
@@ -95,6 +98,9 @@ fun LockOverlayScreen(
     lockMessage: String = "",
     lockIconScale: Float = 1f,
     lockBackgroundDim: Float = 0.82f,
+    lockClockStyle: LockClockStyle = LockClockStyle.LARGE,
+    lockAccent: LockAccent = LockAccent.CYAN,
+    isLockQuickActionsEnabled: Boolean = true,
     biometricEnabled: Boolean,
     isStealthPattern: Boolean = false,
     isFakeCrashEnabled: Boolean = false,
@@ -107,10 +113,12 @@ fun LockOverlayScreen(
     onUnlockSuccess: () -> Unit,
     onCredentialVerified: ((BehavioralInputMetrics) -> Unit)? = null,
     onDuressUnlock: (() -> Unit)? = null,
+    onDecoyUnlock: (() -> Unit)? = null,
     onFailedAttempt: ((Int) -> Unit)? = null,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val accentColor = Color(lockAccent.hex)
     var isError by remember { mutableStateOf(false) }
     var attemptCount by remember { mutableIntStateOf(0) }
     var messageText by remember {
@@ -191,13 +199,13 @@ fun LockOverlayScreen(
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
-                            tint = NeonCyan,
+                            tint = accentColor,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "보호 모드 활성화",
-                            color = NeonCyan,
+                            color = accentColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -217,6 +225,12 @@ fun LockOverlayScreen(
             }
 
             Spacer(modifier = Modifier.height(20.dp))
+
+            if (lockClockStyle != LockClockStyle.HIDDEN) {
+                Text(java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date()), color = Color.White, fontSize = if (lockClockStyle == LockClockStyle.LARGE) 38.sp else 22.sp, fontWeight = FontWeight.Light)
+                Text(java.text.SimpleDateFormat("M월 d일 EEEE", java.util.Locale.KOREA).format(java.util.Date()), color = TextSecondary, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // App Icon and Title
             Surface(
@@ -306,6 +320,8 @@ fun LockOverlayScreen(
                         onPinCompleted = { enteredPin, metrics ->
                             if (targetDuressPin.isNotBlank() && enteredPin == targetDuressPin) {
                                 onDuressUnlock?.invoke()
+                            } else if (targetDecoyPin.isNotBlank() && enteredPin == targetDecoyPin) {
+                                onDecoyUnlock?.invoke()
                             } else if (enteredPin == targetPin) {
                                 onCredentialVerified?.invoke(metrics.copy(deviceTiltDegrees = deviceTiltDegrees)) ?: onUnlockSuccess()
                             } else {
@@ -458,6 +474,8 @@ fun LockOverlayScreen(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
+
+            if (isLockQuickActionsEnabled) Text("◉                                      🔦", color = accentColor.copy(alpha = 0.8f), fontSize = 17.sp, modifier = Modifier.fillMaxWidth())
 
             androidx.compose.material3.TextButton(
                 onClick = onDismiss,

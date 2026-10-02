@@ -109,6 +109,7 @@ import com.example.model.AiGuardFallback
 import com.example.util.BehavioralGuard
 import android.widget.Toast
 import android.widget.VideoView
+import android.widget.MediaController
 import android.net.Uri
 import com.example.ui.components.AppItemCard
 import com.example.ui.components.BatchTimeoutDialog
@@ -1425,7 +1426,7 @@ fun SettingsView(
                     }
                     OutlinedButton(onClick = onConfigureDisguise, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("위장 아이콘 설정", color = NeonAmber, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = onConfigureDuressPin, enabled = lockConfig.lockType == LockType.PIN, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed), modifier = Modifier.fillMaxWidth()) {
-                        Text(if (lockConfig.lockType == LockType.PIN) "듀레스 PIN 설정 (긴급 보호)" else "듀레스 PIN: PIN 잠금 방식에서 사용 가능", color = NeonRed, fontWeight = FontWeight.Bold)
+                        Text(if (lockConfig.lockType == LockType.PIN) "듀레스 · 미끼 PIN 설정" else "듀레스/미끼 PIN: PIN 잠금 방식에서 사용 가능", color = NeonRed, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(onClick = onConfigureEmergencyContact, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("잠금 화면 비상 연락처", color = NeonAmber, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = onEditLockStyle, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("잠금 화면 스타일 편집기", color = NeonCyan, fontWeight = FontWeight.Bold) }
@@ -2458,7 +2459,8 @@ fun IntruderSelfieVaultView(
 
     val photoLogsCount = remember(logs) { logs.count { it.photoPath != null } }
     val videoLogsCount = remember(logs) { logs.count { it.videoPath != null } }
-    val visibleLogs = if (mediaTab == 0) logs.filter { it.photoPath != null } else logs.filter { it.videoPath != null }
+    val audioLogsCount = remember(logs) { logs.count { it.audioPath != null } }
+    val visibleLogs = when (mediaTab) { 0 -> logs.filter { it.photoPath != null }; 1 -> logs.filter { it.videoPath != null }; else -> logs.filter { it.audioPath != null } }
 
     Column(
         modifier = Modifier
@@ -2502,7 +2504,7 @@ fun IntruderSelfieVaultView(
                                 color = TextPrimary
                             )
                             Text(
-                                text = "사진 ${photoLogsCount}장 · 영상 ${videoLogsCount}개 / 시도 ${logs.size}건",
+                                text = "사진 ${photoLogsCount}장 · 영상 ${videoLogsCount}개 · 음성 ${audioLogsCount}개 / 시도 ${logs.size}건",
                                 color = NeonRed,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -2690,14 +2692,15 @@ fun IntruderSelfieVaultView(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             FilterChip(selected = mediaTab == 0, onClick = { mediaTab = 0 }, label = { Text("사진 ($photoLogsCount)") }, modifier = Modifier.weight(1f), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonRed, selectedLabelColor = Color.White))
             FilterChip(selected = mediaTab == 1, onClick = { mediaTab = 1 }, label = { Text("동영상 ($videoLogsCount)") }, modifier = Modifier.weight(1f), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonPurple, selectedLabelColor = Color.White))
+            FilterChip(selected = mediaTab == 2, onClick = { mediaTab = 2 }, label = { Text("음성 ($audioLogsCount)") }, modifier = Modifier.weight(1f), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonCyan, selectedLabelColor = Color.Black))
         }
         Spacer(modifier = Modifier.height(8.dp))
 
         // 4. Intruder Cards List or Empty View
         if (visibleLogs.isEmpty()) {
             EmptyAppsView(
-                title = if (mediaTab == 0) "촬영된 침입자 사진이 없습니다" else "새로 녹화된 침입자 영상이 없습니다",
-                desc = if (mediaTab == 0) "인증 실패 시 촬영된 사진이 여기에 표시됩니다." else "비밀번호를 한 번 틀리면 5초 영상이 자동 녹화되어 여기에 표시됩니다."
+                title = when (mediaTab) { 0 -> "촬영된 침입자 사진이 없습니다"; 1 -> "새로 녹화된 침입자 영상이 없습니다"; else -> "저장된 음성 기록이 없습니다" },
+                desc = when (mediaTab) { 0 -> "인증 실패 시 촬영된 사진이 여기에 표시됩니다."; 1 -> "비밀번호를 한 번 틀리면 5초 영상이 자동 녹화되어 여기에 표시됩니다."; else -> "음성 기록을 켜면 비밀번호 1회 실패 시 5초 음성이 여기에 저장됩니다." }
             )
         } else {
             LazyColumn(
@@ -2762,6 +2765,10 @@ fun IntruderSelfieVaultView(
                                         Text("▶", color = NeonPurple, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                                         Text("5초 영상", color = TextPrimary, fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
                                     }
+                                }
+                            } else if (mediaTab == 2 && log.audioPath != null) {
+                                Surface(shape = RoundedCornerShape(12.dp), color = NeonCyan.copy(alpha = 0.14f), modifier = Modifier.size(80.dp).clickable { viewingPhotoLog = log }) {
+                                    Box(contentAlignment = Alignment.Center) { Text("♫", color = NeonCyan, fontSize = 30.sp, fontWeight = FontWeight.Bold); Text("5초 음성", color = TextPrimary, fontSize = 10.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) }
                                 }
                             } else {
                                 Surface(
@@ -2891,7 +2898,7 @@ fun IntruderSelfieVaultView(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                            text = if (log.videoPath != null && log.photoPath == null) "침입자 포착 영상" else "침입자 포착 사진",
+                            text = when { log.videoPath != null && log.photoPath == null -> "침입자 포착 영상"; log.audioPath != null -> "침입자 음성 기록"; else -> "침입자 포착 사진" },
                                 color = NeonRed,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
@@ -2934,6 +2941,17 @@ fun IntruderSelfieVaultView(
                             factory = { VideoView(it).apply { setVideoURI(Uri.fromFile(File(log.videoPath))); setOnPreparedListener { player -> player.isLooping = true; start() } } },
                             modifier = Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(14.dp)).background(Color.Black)
                         )
+                    } else if (log.audioPath != null) {
+                        AndroidView(
+                            factory = { viewContext ->
+                                VideoView(viewContext).apply {
+                                    setVideoURI(Uri.fromFile(File(log.audioPath)))
+                                    setMediaController(MediaController(viewContext).also { it.setAnchorView(this) })
+                                    setOnPreparedListener { start() }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp).background(Color.Black)
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -2962,8 +2980,8 @@ fun IntruderSelfieVaultView(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         OutlinedButton(
-                            onClick = { (log.photoPath ?: log.videoPath)?.let(onDownloadIntruderPhoto) },
-                            enabled = log.photoPath != null || log.videoPath != null,
+                            onClick = { (log.photoPath ?: log.videoPath ?: log.audioPath)?.let(onDownloadIntruderPhoto) },
+                            enabled = log.photoPath != null || log.videoPath != null || log.audioPath != null,
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
                             border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
                             shape = RoundedCornerShape(10.dp),

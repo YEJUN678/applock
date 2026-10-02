@@ -25,6 +25,9 @@ object AppLockPreferences {
     private const val KEY_LOCK_MESSAGE = "lock_screen_message"
     private const val KEY_LOCK_ICON_SCALE = "lock_icon_scale"
     private const val KEY_LOCK_DIM = "lock_background_dim"
+    private const val KEY_LOCK_CLOCK_STYLE = "lock_clock_style"
+    private const val KEY_LOCK_ACCENT = "lock_accent"
+    private const val KEY_LOCK_QUICK_ACTIONS = "lock_quick_actions"
     private const val KEY_TIMEOUT = "lock_timeout_seconds"
     private const val KEY_STEALTH_PATTERN = "stealth_pattern"
     private const val KEY_FAKE_CRASH = "fake_crash"
@@ -43,6 +46,7 @@ object AppLockPreferences {
     private const val KEY_PANIC_SHAKE = "panic_shake_enabled"
     private const val KEY_PANIC_SHAKE_STRENGTH = "panic_shake_strength"
     private const val KEY_DURESS_PIN = "duress_pin"
+    private const val KEY_DECOY_PIN = "decoy_pin"
     private const val KEY_EMERGENCY_CONTACT = "emergency_contact"
     private const val KEY_NOTIFICATION_PRIVACY = "notification_privacy_enabled"
     private const val KEY_SCREEN_OFF_LOCK = "screen_off_lock_enabled"
@@ -200,6 +204,8 @@ object AppLockPreferences {
 
     fun getDuressPin(context: Context): String = getPrefs(context).getString(KEY_DURESS_PIN, "") ?: ""
     fun setDuressPin(context: Context, pin: String) = getPrefs(context).edit().putString(KEY_DURESS_PIN, pin).apply()
+    fun getDecoyPin(context: Context): String = getPrefs(context).getString(KEY_DECOY_PIN, "") ?: ""
+    fun setDecoyPin(context: Context, pin: String) = getPrefs(context).edit().putString(KEY_DECOY_PIN, pin).apply()
     fun getEmergencyContact(context: Context): String = getPrefs(context).getString(KEY_EMERGENCY_CONTACT, "") ?: ""
     fun setEmergencyContact(context: Context, contact: String) = getPrefs(context).edit().putString(KEY_EMERGENCY_CONTACT, contact.trim()).apply()
     fun isDuressSession(context: Context): Boolean = getPrefs(context).getBoolean(KEY_DURESS_SESSION, false)
@@ -263,6 +269,9 @@ object AppLockPreferences {
         val lockMessage = prefs.getString(KEY_LOCK_MESSAGE, "") ?: ""
         val iconScale = prefs.getFloat(KEY_LOCK_ICON_SCALE, 1f).coerceIn(0.75f, 1.35f)
         val dim = prefs.getFloat(KEY_LOCK_DIM, 0.82f).coerceIn(0.45f, 0.95f)
+        val clockStyle = runCatching { com.example.model.LockClockStyle.valueOf(prefs.getString(KEY_LOCK_CLOCK_STYLE, com.example.model.LockClockStyle.LARGE.name)!!) }.getOrDefault(com.example.model.LockClockStyle.LARGE)
+        val accent = runCatching { com.example.model.LockAccent.valueOf(prefs.getString(KEY_LOCK_ACCENT, com.example.model.LockAccent.CYAN.name)!!) }.getOrDefault(com.example.model.LockAccent.CYAN)
+        val quickActions = prefs.getBoolean(KEY_LOCK_QUICK_ACTIONS, true)
         val timeoutSeconds = prefs.getInt(KEY_TIMEOUT, 30)
         cachedTimeoutMs = timeoutSeconds * 1000L
         val stealth = prefs.getBoolean(KEY_STEALTH_PATTERN, false)
@@ -302,6 +311,9 @@ object AppLockPreferences {
             lockScreenMessage = lockMessage,
             lockIconScale = iconScale,
             lockBackgroundDim = dim,
+            lockClockStyle = clockStyle,
+            lockAccent = accent,
+            isLockQuickActionsEnabled = quickActions,
             lockTimeoutSeconds = timeoutSeconds,
             isStealthPattern = stealth,
             isFakeCrashEnabled = fakeCrash,
@@ -346,6 +358,9 @@ object AppLockPreferences {
             .putString(KEY_LOCK_MESSAGE, config.lockScreenMessage)
             .putFloat(KEY_LOCK_ICON_SCALE, config.lockIconScale)
             .putFloat(KEY_LOCK_DIM, config.lockBackgroundDim)
+            .putString(KEY_LOCK_CLOCK_STYLE, config.lockClockStyle.name)
+            .putString(KEY_LOCK_ACCENT, config.lockAccent.name)
+            .putBoolean(KEY_LOCK_QUICK_ACTIONS, config.isLockQuickActionsEnabled)
             .putInt(KEY_TIMEOUT, config.lockTimeoutSeconds)
             .putBoolean(KEY_STEALTH_PATTERN, config.isStealthPattern)
             .putBoolean(KEY_FAKE_CRASH, config.isFakeCrashEnabled)
@@ -403,7 +418,8 @@ object AppLockPreferences {
                         attemptCount = obj.getInt("attemptCount"),
                         usedLockType = obj.optString("usedLockType", "패턴"),
                         photoPath = obj.optString("photoPath").takeIf { it.isNotEmpty() },
-                        videoPath = obj.optString("videoPath").takeIf { it.isNotEmpty() }
+                        videoPath = obj.optString("videoPath").takeIf { it.isNotEmpty() },
+                        audioPath = obj.optString("audioPath").takeIf { it.isNotEmpty() }
                     )
                 )
             }
@@ -418,7 +434,8 @@ object AppLockPreferences {
         attempts: Int,
         usedLockType: String = "패턴",
         photoPath: String? = null,
-        videoPath: String? = null
+        videoPath: String? = null,
+        audioPath: String? = null
     ) {
         val logs = getIntruderLogs(context).toMutableList()
         val newLog = IntruderLog(
@@ -429,7 +446,8 @@ object AppLockPreferences {
             attemptCount = attempts,
             usedLockType = usedLockType,
             photoPath = photoPath,
-            videoPath = videoPath
+            videoPath = videoPath,
+            audioPath = audioPath
         )
         logs.add(0, newLog)
         // Keep last 40 logs
@@ -446,6 +464,7 @@ object AppLockPreferences {
                     put("usedLockType", log.usedLockType)
                     log.photoPath?.let { put("photoPath", it) }
                     log.videoPath?.let { put("videoPath", it) }
+                    log.audioPath?.let { put("audioPath", it) }
                 }
                 jsonArray.put(obj)
             }
@@ -463,6 +482,7 @@ object AppLockPreferences {
             } catch (_: Exception) {}
         }
         target?.videoPath?.let { path -> runCatching { java.io.File(path).delete() } }
+        target?.audioPath?.let { path -> runCatching { java.io.File(path).delete() } }
         logs.removeAll { it.id == id }
         try {
             val jsonArray = JSONArray()
@@ -476,6 +496,7 @@ object AppLockPreferences {
                     put("usedLockType", log.usedLockType)
                     log.photoPath?.let { put("photoPath", it) }
                     log.videoPath?.let { put("videoPath", it) }
+                    log.audioPath?.let { put("audioPath", it) }
                 }
                 jsonArray.put(obj)
             }
