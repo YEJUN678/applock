@@ -187,6 +187,7 @@ fun AppLockerHomeScreen(
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val appContext = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(1) } // 0: Locked, 1: Unlocked, 2: Intruder Selfie, 3: Settings
     var searchQuery by remember { mutableStateOf("") }
     var showSetPatternSheet by remember { mutableStateOf(false) }
@@ -871,8 +872,8 @@ fun AppLockerHomeScreen(
                             },
                             onRequestAiGuardAudioPermission = onRequestAiGuardAudioPermission,
                             onResetAiGuardLearning = {
-                                BehavioralGuard.reset(context)
-                                Toast.makeText(context, "AI 가드 학습 데이터를 초기화했습니다.", Toast.LENGTH_SHORT).show()
+                                BehavioralGuard.reset(appContext)
+                                Toast.makeText(appContext, "AI 가드 학습 데이터를 초기화했습니다.", Toast.LENGTH_SHORT).show()
                             },
                             onToggleIntruderSiren = {
                                 onLockConfigChanged(lockConfig.copy(isIntruderSirenEnabled = it))
