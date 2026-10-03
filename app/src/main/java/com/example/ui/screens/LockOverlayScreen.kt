@@ -127,7 +127,7 @@ fun LockOverlayScreen(
                 LockType.PIN -> "숫자 PIN 비밀번호를 입력하세요"
                 LockType.PATTERN -> "보안 패턴을 입력하세요"
                 LockType.PASSWORD -> "보안 비밀번호를 입력하세요"
-                LockType.CALCULATOR -> "암호 입력 후 '=' 버튼을 터치하세요"
+                LockType.CALCULATOR -> "암호를 입력한 뒤 '=' 버튼을 길게 누르세요"
                 LockType.KNOCK_CODE -> "4분면 노크 코드를 터치하세요"
             }
         )
@@ -144,9 +144,8 @@ fun LockOverlayScreen(
                 onRevealLock = { showFakeCrash = false }
             )
             FakeScreenKind.CALCULATOR -> CalculatorDisguiseLockView(
-                targetCode = targetCalculatorCode,
-                onCodeSubmitted = { enteredCode -> if (enteredCode == targetCalculatorCode) showFakeCrash = false },
-                modifier = modifier.fillMaxSize()
+                onCodeSubmitted = { showFakeCrash = false },
+                modifier = Modifier.fillMaxSize().padding(bottom = 24.dp)
             )
             FakeScreenKind.MAINTENANCE -> MaintenanceDisguise(appName = appName, onRevealLock = { showFakeCrash = false })
             FakeScreenKind.CRASH -> FakeCrashDisguise(
@@ -167,7 +166,7 @@ fun LockOverlayScreen(
                 LockType.PIN -> "숫자 PIN 비밀번호를 다시 입력하세요"
                 LockType.PATTERN -> "보안 패턴을 다시 입력하세요 (${gridSize}x${gridSize} 그리드)"
                 LockType.PASSWORD -> "비밀번호를 다시 입력하세요"
-                LockType.CALCULATOR -> "올바른 암호 입력 후 '=' 버튼을 누르세요"
+                LockType.CALCULATOR -> "암호를 입력한 뒤 '=' 버튼을 길게 누르세요"
                 LockType.KNOCK_CODE -> "노크 코드를 다시 순서대로 터치하세요"
             }
         }
@@ -391,7 +390,6 @@ fun LockOverlayScreen(
                 }
                 LockType.CALCULATOR -> {
                     CalculatorDisguiseLockView(
-                        targetCode = targetCalculatorCode,
                         isError = isError,
                         enabled = !isError,
                         isVibrationEnabled = isVibrationEnabled,
@@ -578,104 +576,123 @@ fun LockOverlayScreen(
             }
         }
 
-        // Fake Crash Disguise Dialog
+        // Fake Crash Disguise Dialog (시스템 오류창 위장)
         if (showFakeCrash) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFA0B0F19)),
-                contentAlignment = Alignment.Center
+            SystemCrashDisguiseDialog(
+                appName = appName,
+                onCloseApp = onDismiss,
+                onRevealLock = { showFakeCrash = false }
+            )
+        }
+    }
+}
+
+/** 안드로이드 시스템 오류창처럼 보이는 가짜 오류창. 닫기 버튼을 길게 눌러야 잠금 화면이 열린다. */
+@Composable
+private fun SystemCrashDisguiseDialog(
+    appName: String,
+    onCloseApp: () -> Unit,
+    onRevealLock: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF000000).copy(alpha = 0.88f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFF2B2B2F),
+            shadowElevation = 24.dp,
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .padding(16.dp)
+                .pointerInput(Unit) {
+                    // 대화창 여백을 길게 눌러도 잠금 화면으로 진입한다.
+                    detectTapGestures(onLongPress = { onRevealLock() })
+                }
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 24.dp, top = 26.dp, end = 24.dp, bottom = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0xFF1E293B),
-                    shadowElevation = 12.dp,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
-                    modifier = Modifier
-                        .fillMaxWidth(0.88f)
-                        .padding(16.dp)
+                    shape = CircleShape,
+                    color = Color(0xFF3A3A40),
+                    modifier = Modifier.size(52.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = NeonRed.copy(alpha = 0.15f),
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clickable {
-                                    // Hidden unlock: tapping icon reveals pattern
-                                    showFakeCrash = false
-                                }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = "경고",
-                                    tint = NeonRed,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = "애플리케이션 오류",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFE8EAED),
+                            modifier = Modifier.size(28.dp)
                         )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = "'$appName' 앱의 작동이 중지되었습니다.\n시스템 안정성을 위해 강제 종료합니다.",
-                            color = TextSecondary,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 20.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedButton(
-                                onClick = onDismiss,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("보고서 전송", color = TextSecondary, fontSize = 13.sp)
-                            }
-
-                            Button(
-                                onClick = onDismiss,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF3B82F6),
-                                    contentColor = Color.White
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .pointerInput(Unit) {
-                                        detectTapGestures(
-                                            onTap = { onDismiss() },
-                                            onLongPress = {
-                                                // Secret trigger: long press on OK unlocks fake crash!
-                                                showFakeCrash = false
-                                            }
-                                        )
-                                    }
-                            ) {
-                                Text("확인", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            }
-                        }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "불행하게도, $appName 앱이 중단되었습니다",
+                    color = Color(0xFFE8EAED),
+                    fontSize = 19.sp,
+                    lineHeight = 26.sp,
+                    fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "앱이 비정상적으로 종료되었습니다. 계속되면 다른 앱에도 문제가 생길 수 있습니다.",
+                    color = Color(0xFFB7BAC1),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedButton(
+                        onClick = onCloseApp,
+                        shape = RoundedCornerShape(22.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6F7379)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB7BAC1)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                    ) {
+                        Text("앱 정보", fontSize = 14.sp)
+                    }
+
+                    Button(
+                        onClick = {},
+                        shape = RoundedCornerShape(22.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF8AB4F8),
+                            contentColor = Color(0xFF0B1220)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .pointerInput(Unit) {
+                                // 한 번 누르면 앱 종료(위장), 길게 눌러야 잠금 화면이 열린다.
+                                detectTapGestures(
+                                    onTap = { onCloseApp() },
+                                    onLongPress = { onRevealLock() }
+                                )
+                            }
+                    ) {
+                        Text("닫기", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
             }
         }
     }
@@ -686,30 +703,11 @@ enum class FakeScreenKind { CRASH, EMPTY_ALBUM, CALCULATOR, MAINTENANCE }
 
 @Composable
 private fun FakeCrashDisguise(appName: String, onDismiss: () -> Unit, onRevealLock: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF0B0F19)),
-        contentAlignment = Alignment.Center
-    ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp), color = Color(0xFF1E293B),
-            modifier = Modifier.fillMaxWidth(0.88f).padding(16.dp)
-        ) {
-            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Warning, contentDescription = null, tint = NeonRed, modifier = Modifier.size(38.dp))
-                Spacer(Modifier.height(16.dp))
-                Text("애플리케이션 오류", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                Spacer(Modifier.height(8.dp))
-                Text("'$appName' 앱의 작동이 중지되었습니다.", color = TextSecondary, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = {},
-                    modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
-                        detectTapGestures(onTap = { onDismiss() }, onLongPress = { onRevealLock() })
-                    }
-                ) { Text("확인") }
-            }
-        }
-    }
+    SystemCrashDisguiseDialog(
+        appName = appName,
+        onCloseApp = onDismiss,
+        onRevealLock = onRevealLock
+    )
 }
 
 @Composable
