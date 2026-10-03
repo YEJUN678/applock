@@ -16,7 +16,7 @@ enum class LockType(val title: String, val description: String) {
     PATTERN("그리드 패턴", "3x3 ~ 10x10 커스텀 그리드 연결"),
     PIN("숫자 PIN 비밀번호", "4~8자리 숫자 보안 암호"),
     PASSWORD("문자+숫자 암호", "영문 대소문자, 숫자 조합 비밀번호"),
-    CALCULATOR("보안 계산기", "실제 계산기 기능 지원, 암호 입력 후 '=' 터치 시 잠금 해제"),
+    CALCULATOR("보안 계산기", "실제 계산기 기능 지원, 암호 입력 후 '=' 길게 누르면 잠금 해제"),
     KNOCK_CODE("노크 코드", "4분면 영역을 정해진 순서대로 터치하여 해제")
 }
 
