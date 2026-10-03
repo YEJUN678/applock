@@ -580,7 +580,6 @@ fun AppLockerApp(
             // A duress unlock deliberately exposes no lock list, vault, settings, or logs.
             Box(modifier = Modifier.fillMaxSize()) {
                 CalculatorDisguiseLockView(
-                    targetCode = "__disabled__",
                     onCodeSubmitted = {},
                     modifier = Modifier.fillMaxSize()
                 )
