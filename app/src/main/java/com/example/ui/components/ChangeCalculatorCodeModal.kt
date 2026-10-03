@@ -78,7 +78,7 @@ fun ChangeCalculatorCodeModal(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "계산기 화면에서 이 숫자를 입력하고 '=' 버튼을 누르면 잠금이 해제됩니다.",
+                text = "계산기 화면에서 이 숫자를 입력하고 '=' 버튼을 길게 누르면 잠금이 해제됩니다.",
                 color = TextSecondary,
                 fontSize = 13.sp
             )
