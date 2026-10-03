@@ -20,8 +20,8 @@ class DisguisedEntryActivity : ComponentActivity() {
         if (intent.getBooleanExtra(EXTRA_SHOW_CALCULATOR, false)) {
             setContent {
                 MyApplicationTheme {
-                    // Empty code keeps this as a genuine calculator surface; it cannot open App Lock.
-                    CalculatorDisguiseLockView(targetCode = "", onCodeSubmitted = {}, modifier = Modifier.fillMaxSize())
+                    // Empty callback keeps this a genuine calculator surface; it cannot open App Lock.
+                    CalculatorDisguiseLockView(onCodeSubmitted = {}, modifier = Modifier.fillMaxSize())
                 }
             }
         } else {
