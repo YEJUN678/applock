@@ -16,9 +16,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -55,6 +58,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.viewinterop.AndroidView
@@ -3103,6 +3107,8 @@ fun ChangePatternModal(
     var stepMessage by remember { mutableStateOf("원하는 노드를 연결하여 새 패턴을 그리세요") }
 
     val gridOptions = listOf(3, 4, 5, 6, 7, 8, 9, 10)
+    // Body scrolls while the action row stays pinned, so "이 패턴 저장" is never clipped away.
+    val bodyMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.58f).dp
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -3115,93 +3121,101 @@ fun ChangePatternModal(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp, vertical = 12.dp)
         ) {
-            Text(
-                text = "그리드 크기 및 패턴 설정",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = "그리드 칸 수 선택 (3x3 ~ 10x10 커스텀):",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                modifier = Modifier.align(Alignment.Start)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                gridOptions.take(4).forEach { size ->
-                    FilterChip(
-                        selected = selectedGridSize == size,
-                        onClick = {
-                            selectedGridSize = size
-                            recordedPattern = null
-                            stepMessage = "${size}x${size} 패턴을 연결해 보세요"
-                        },
-                        label = { Text("${size}x${size}") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = NeonCyan,
-                            selectedLabelColor = Color.Black
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                gridOptions.drop(4).forEach { size ->
-                    FilterChip(
-                        selected = selectedGridSize == size,
-                        onClick = {
-                            selectedGridSize = size
-                            recordedPattern = null
-                            stepMessage = "${size}x${size} 패턴을 연결해 보세요"
-                        },
-                        label = { Text("${size}x${size}") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = NeonPurple,
-                            selectedLabelColor = Color.White
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Text(
-                text = stepMessage,
-                color = if (recordedPattern != null) NeonGreen else TextSecondary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            NxNPatternLockView(
-                gridSize = selectedGridSize,
-                onPatternCompleted = { pattern ->
-                    if (pattern.size < 3) {
-                        stepMessage = "보안을 위해 최소 3개 이상의 점을 연결하세요"
-                    } else {
-                        recordedPattern = pattern
-                        stepMessage = "${pattern.size}개 노드가 성공적으로 연결되었습니다!"
-                    }
-                },
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .height(300.dp)
-            )
+                    .fillMaxWidth()
+                    .heightIn(max = bodyMaxHeight)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "그리드 크기 및 패턴 설정",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "그리드 칸 수 선택 (3x3 ~ 10x10 커스텀):",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    gridOptions.take(4).forEach { size ->
+                        FilterChip(
+                            selected = selectedGridSize == size,
+                            onClick = {
+                                selectedGridSize = size
+                                recordedPattern = null
+                                stepMessage = "${size}x${size} 패턴을 연결해 보세요"
+                            },
+                            label = { Text("${size}x${size}") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = NeonCyan,
+                                selectedLabelColor = Color.Black
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    gridOptions.drop(4).forEach { size ->
+                        FilterChip(
+                            selected = selectedGridSize == size,
+                            onClick = {
+                                selectedGridSize = size
+                                recordedPattern = null
+                                stepMessage = "${size}x${size} 패턴을 연결해 보세요"
+                            },
+                            label = { Text("${size}x${size}") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = NeonPurple,
+                                selectedLabelColor = Color.White
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = stepMessage,
+                    color = if (recordedPattern != null) NeonGreen else TextSecondary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                NxNPatternLockView(
+                    gridSize = selectedGridSize,
+                    onPatternCompleted = { pattern ->
+                        if (pattern.size < 3) {
+                            stepMessage = "보안을 위해 최소 3개 이상의 점을 연결하세요"
+                        } else {
+                            recordedPattern = pattern
+                            stepMessage = "${pattern.size}개 노드가 성공적으로 연결되었습니다!"
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .height(300.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -3255,6 +3269,9 @@ fun ChangeThemeModal(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Keeps every theme reachable on short screens instead of clipping the last cards.
+                .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.72f).dp)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 16.dp)
         ) {
             Text(
