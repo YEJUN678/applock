@@ -455,7 +455,79 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * 다운로드한 APK가 지금 설치된 앱과 같은 서명인지 확인한다.
+     * 서명이 다르면(변조 APK 또는 다른 키로 빌드된 APK) 설치를 진행하지 않는다.
+     */
+    private fun verifyUpdateSignature(apkUri: Uri): Boolean {
+        val temp = java.io.File(cacheDir, "update-verify.apk")
+        return try {
+            contentResolver.openInputStream(apkUri)?.use { input ->
+                temp.outputStream().use { output -> input.copyTo(output) }
+            } ?: return false
+
+            val archive = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageArchiveInfo(
+                    temp.absolutePath,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(
+                        android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES.toLong()
+                    )
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageArchiveInfo(temp.absolutePath, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+            } ?: return false
+            if (archive.packageName != packageName) return false
+
+            val archiveSigners = signingCertsOf(archive)
+            val installed = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(
+                    packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(
+                        android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES.toLong()
+                    )
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+            }
+            val installedSigners = signingCertsOf(installed)
+            if (archiveSigners.isEmpty() || installedSigners.isEmpty()) return false
+            java.security.MessageDigest.isEqual(archiveSigners, installedSigners)
+        } catch (_: Exception) {
+            false
+        } finally {
+            temp.delete()
+        }
+    }
+
+    private fun signingCertsOf(info: android.content.pm.PackageInfo): ByteArray {
+        return try {
+            val signature = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                info.signingInfo?.apkContentsSigners?.firstOrNull()
+            } else {
+                @Suppress("DEPRECATION")
+                info.signatures?.firstOrNull()
+            }
+            signature?.toByteArray() ?: ByteArray(0)
+        } catch (_: Exception) {
+            ByteArray(0)
+        }
+    }
+
     private fun launchPackageInstaller(apkUri: Uri) {
+        // 서명 검증: 안 맞으면 설치 화면을 열지 않는다.
+        if (!verifyUpdateSignature(apkUri)) {
+            downloadedUpdateUri = null
+            isUpdateDownloading = false
+            updateDownloadProgress = null
+            Toast.makeText(
+                this,
+                "업데이트 파일의 서명이 지금 설치된 앱과 다릅니다. 변조되었거나 다른 키로 빌드된 파일이라 설치하지 않았습니다.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
             pendingInstallerUri = apkUri
             Toast.makeText(this, "이 출처의 앱 설치를 허용한 뒤 다시 업데이트를 눌러 주세요.", Toast.LENGTH_LONG).show()

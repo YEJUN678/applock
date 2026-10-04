@@ -1,6 +1,9 @@
 name: Build Android APK
 on: [push, workflow_dispatch]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -23,15 +26,50 @@ jobs:
           mkdir -p app/
           echo '{"project_info":{"project_number":"123456789","project_id":"fake-project"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789:android:123456789","android_client_info":{"package_name":"com.aistudio.applock.nxpattern"}},"api_key":[{"current_key":"AIzaSyFakeKey_1234567890abcdefghijklm"}]}]}' > app/google-services.json
 
-      # 3. 임시 디버그 인증서(keystore) 강제 생성
-      - name: Generate missing debug keystore
+      # 3. 저장소에 커밋된 고정 debug.keystore 를 사용한다.
+      #    (매 빌드마다 새 키를 만들면 APK 서명이 달라져 업데이트가 설치 단계에서 거부된다)
+      - name: Ensure debug keystore exists
         run: |
-          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          if [ ! -f debug.keystore ]; then
+            echo "::warning::debug.keystore 가 없어서 새로 생성합니다(서명 고정 안 됨)."
+            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=App Lock Debug,O=Android,C=KR"
+          else
+            keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey >/dev/null
+            echo "고정 debug.keystore 확인 완료"
+          fi
+
+      # 4. versions.txt 가 실제 APK 와 일치하는지 검증 (정수·단조 증가·https)
+      - name: Validate versions.txt
+        run: |
+          set -euo pipefail
+          get() { grep -E "^$1=" versions.txt | head -1 | cut -d= -f2- | tr -d '\r'; }
+          code="$(get versionCode)"
+          name="$(get versionName)"
+          apk="$(get apkUrl)"
+          gradle_code="$(grep -E '^\s*versionCode\s*=' app/build.gradle.kts | head -1 | grep -oE '[0-9]+' | head -1)"
+          echo "versions.txt -> versionCode=$code versionName=$name"
+          echo "build.gradle.kts -> versionCode=$gradle_code"
+          if ! [[ "$code" =~ ^[0-9]+$ ]]; then
+            echo "::error title=versionCode 형식 오류::versions.txt 의 versionCode 는 정수여야 합니다 (현재: '$code')"
+            exit 1
+          fi
+          if [ "$code" -le "$gradle_code" ]; then
+            echo "::error title=versionCode 불일치::versions.txt(${code}) 는 build.gradle.kts(${gradle_code}) 보다 커야 합니다. 그 외에는 업데이트가 뜨지 않습니다."
+            exit 1
+          fi
+          if [[ "$apk" != https://* ]]; then
+            echo "::error title=apkUrl 형식 오류::apkUrl 은 https 로 시작해야 합니다 (현재: '$apk')"
+            exit 1
+          fi
+          if ! curl -sfI -o /dev/null "$apk"; then
+            echo "::warning title=apkUrl 404::아직 릴리스에 APK 가 없거나 주소가 틀렸습니다: $apk (빌드 후 릴리스 자동화로 생성됩니다)"
+          fi
+          echo "$name" > release_name.txt
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # 4. 테스트 과정을 제외하고 100% 깔끔하게 순수 APK만 컴파일 수행
+      # 5. 테스트 과정을 제외하고 100% 깔끔하게 순수 APK만 컴파일 수행
       - name: Build Debug APK
         run: gradle assembleDebug -x test
 
@@ -40,3 +78,36 @@ jobs:
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      # 6. 빌드 성공 시 GitHub 릴리스 생성 + APK 첨부 (versions.txt 의 apkUrl 이 가리키는 태그)
+      - name: Publish release with APK
+        run: |
+          set -euo pipefail
+          name="$(cat release_name.txt)"
+          tag="applockbeta${name}"
+          notes="$(grep -E '^notes=' versions.txt | head -1 | cut -d= -f2- | sed 's/\\n/\n/g')"
+          apk="app/build/outputs/apk/debug/app-debug.apk"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "태그 $tag 릴리스가 이미 있어 건너뜁니다."
+            exit 0
+          fi
+
+          gh release create "$tag" "$apk" \
+            --title "App Lock & Vault v${name}" \
+            --notes "$notes"
+          echo "릴리스 생성 완료: $tag"
+
+      - name: Verify published APK URL
+        run: |
+          set -euo pipefail
+          apk="$(grep -E '^apkUrl=' versions.txt | head -1 | cut -d= -f2- | tr -d '\r')"
+          for i in $(seq 1 10); do
+            if curl -sfI -o /dev/null "$apk"; then
+              echo "apkUrl 정상: $apk"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error title=apkUrl 확인 실패::릴리스 생성 후에도 접근할 수 없습니다: $apk"
+          exit 1

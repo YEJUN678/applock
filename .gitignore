@@ -15,4 +15,6 @@
 .cxx
 local.properties
 .env
-debug.keystore
+# 고정 debug 서명 키는 의도적으로 커밋한다 (CI 빌드 간 서명 동일성 유지).
+# 실제 배포용 키는 절대 여기에 두지 않는다.
+# debug.keystore

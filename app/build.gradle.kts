@@ -19,8 +19,8 @@ android {
     targetSdk = 36
     // Keep this in sync with versions.txt. Android will reject an APK whose
     // versionCode is not higher than the installed build.
-    versionCode = 11
-    versionName = "9"
+    versionCode = 12
+    versionName = "10"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -33,6 +33,18 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
+    // Debug builds use one fixed key so in-app updates keep working.
+    // Letting each CI run generate its own key changes the APK signature on
+    // every build, which makes Android reject the update (INSTALL_FAILED_UPDATE_INCOMPATIBLE).
+    getByName("debug") {
+      val fixedKeystore = file("${rootDir}/debug.keystore")
+      if (fixedKeystore.exists()) {
+        storeFile = fixedKeystore
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
+    }
   }
 
   buildTypes {
@@ -42,9 +54,8 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    // Debug builds use Gradle's standard auto-generated debug key
-    // (~/.android/debug.keystore). A custom debug.keystore is git-ignored, so
-    // requiring it here broke `assembleDebug` on any fresh clone.
+    // Debug builds are signed with the fixed debug keystore (see signingConfigs).
+    // Falls back to Gradle's generated key when the file is absent.
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
