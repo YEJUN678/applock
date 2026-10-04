@@ -6,8 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import com.example.service.AppLockAccessibilityService
 
 object AppLockPermissionHelper {
@@ -130,6 +132,60 @@ object AppLockPermissionHelper {
             imList.any { it.packageName == packageName }
         } catch (_: Exception) {
             false
+        }
+    }
+
+    // --- 권한 설정 도우미(온보딩)에서 사용하는 상태 확인 ---
+
+    /** 잠긴 앱 알림 차단용 알림 접근 권한. */
+    fun hasNotificationListenerPermission(context: Context): Boolean = try {
+        NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+    } catch (_: Exception) {
+        false
+    }
+
+    fun getNotificationListenerSettingsIntent(): Intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    }
+
+    /** 감시 서비스가 죽지 않으려면 배터리 최적화 예외 대상이어야 한다. */
+    fun hasBatteryOptimizationExemption(context: Context): Boolean = try {
+        (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isIgnoringBatteryOptimizations(context.packageName) == true
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
+     * REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 권한 없이 목록 화면으로 안내한다.
+     * (이 권한은 마켓 정책 위반 소지가 있어 앱에는 선언하지 않는다)
+     */
+    fun getBatteryOptimizationSettingsIntent(): Intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    }
+
+    fun canPostNotifications(context: Context): Boolean = try {
+        NotificationManagerCompat.from(context).areNotificationsEnabled()
+    } catch (_: Exception) {
+        false
+    }
+
+    /** GitHub APK 업데이트 설치를 위한 '알 수 없는 소스' 허용 여부. */
+    fun canRequestPackageInstalls(context: Context): Boolean = try {
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls()
+    } catch (_: Exception) {
+        false
+    }
+
+    fun getUnknownSourcesSettingsIntent(context: Context): Intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+        data = Uri.parse("package:${context.packageName}")
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    }
+
+    fun launchSettings(context: Context, intent: Intent) {
+        runCatching { context.startActivity(intent) }.onFailure {
+            runCatching {
+                context.startActivity(Intent(Settings.ACTION_SETTINGS).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK })
+            }
         }
     }
 }

@@ -30,15 +30,18 @@ object SecureNotesManager {
         String(cipher.doFinal(ciphertext), Charsets.UTF_8)
     }.getOrDefault("")
 
-    fun save(context: Context, note: String) {
+    /** Returns false instead of throwing, so the UI can tell the user the note was NOT stored. */
+    fun save(context: Context, note: String): Boolean = runCatching {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val ciphertext = cipher.doFinal(note.toByteArray(Charsets.UTF_8))
         val packed = ByteBuffer.allocate(4 + cipher.iv.size + ciphertext.size)
             .putInt(cipher.iv.size).put(cipher.iv).put(ciphertext).array()
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(VALUE, Base64.encodeToString(packed, Base64.NO_WRAP)).apply()
-    }
+        val encoded = Base64.encodeToString(packed, Base64.NO_WRAP)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // commit() 로 실패를 감지한다. 실패해도 기존 값을 지우지 않는다(내용 손실 방지).
+        prefs.edit().putString(VALUE, encoded).commit()
+    }.getOrDefault(false)
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance(KEYSTORE).apply { load(null) }

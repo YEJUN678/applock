@@ -36,6 +36,28 @@ enum class AiGuardFallback(val title: String) {
 enum class LockClockStyle(val title: String) { LARGE("대형"), COMPACT("간결"), HIDDEN("숨김") }
 enum class LockAccent(val title: String, val hex: Long) { CYAN("시안", 0xFF00E5FF), PURPLE("보라", 0xFFB388FF), GREEN("그린", 0xFF69F0AE), AMBER("앰버", 0xFFFFD740) }
 
+/** One UI 8.5 스타일 잠금 화면 프리셋. 세부는 개별 옵션으로 더 조정한다. */
+enum class LockPreset(
+    val title: String,
+    val description: String,
+    val blur: Float,
+    val corner: Float,
+    val clockPosition: LockClockPosition,
+    val iconShape: LockIconShape,
+    val fontStyle: LockFontStyle,
+    val panelAlpha: Float
+) {
+    ONE_UI("One UI 8.5", "블러 배경 · 은은한 패널 · 큰 시계", 0.55f, 28f, LockClockPosition.TOP_CENTER, LockIconShape.CIRCLE, LockFontStyle.SANS, 0.16f),
+    MINIMAL("미니멀 매트", "무채색 · 얇은 라인 · 작은 시계", 0.15f, 16f, LockClockPosition.TOP_LEFT, LockIconShape.ROUNDED, LockFontStyle.SANS, 0.08f),
+    GLASS("글래스 패널", "반투명 카드 · 강한 흐림", 0.75f, 32f, LockClockPosition.TOP_RIGHT, LockIconShape.ROUNDED, LockFontStyle.SANS, 0.24f),
+    NEON_CYBER("네온 사이버", "고대비 네온 · 글로우 테두리", 0.35f, 12f, LockClockPosition.TOP_CENTER, LockIconShape.SQUARE, LockFontStyle.MONO, 0.12f),
+    CLASSIC("클래식 안드로이드", "시스템 잠금 화면 느낌", 0.25f, 24f, LockClockPosition.TOP_CENTER, LockIconShape.CIRCLE, LockFontStyle.SERIF, 0.10f)
+}
+
+enum class LockClockPosition(val title: String) { TOP_CENTER("상단 중앙"), TOP_LEFT("좌측 상단"), TOP_RIGHT("우측 상단") }
+enum class LockIconShape(val title: String) { CIRCLE("원형"), ROUNDED("둥근 사각형"), SQUARE("각진 사각형") }
+enum class LockFontStyle(val title: String) { SANS("산세리프"), SERIF("세리프"), MONO("고정폭") }
+
 data class LockConfig(
     val lockType: LockType = LockType.PATTERN,
     val gridSize: Int = 3, // 3 to 10
@@ -52,6 +74,14 @@ data class LockConfig(
     val lockBackgroundDim: Float = 0.82f,
     val lockClockStyle: LockClockStyle = LockClockStyle.LARGE,
     val lockAccent: LockAccent = LockAccent.CYAN,
+    // 잠금 화면 꾸미기 (One UI 8.5 스타일 프리셋 + 세부 옵션)
+    val lockPreset: LockPreset = LockPreset.ONE_UI,
+    val lockBackgroundBlur: Float = 0.55f,          // 0..1
+    val lockPanelAlpha: Float = 0.16f,              // 0..0.5
+    val lockCornerRadius: Float = 28f,              // dp
+    val lockClockPosition: LockClockPosition = LockClockPosition.TOP_CENTER,
+    val lockIconShape: LockIconShape = LockIconShape.CIRCLE,
+    val lockFontStyle: LockFontStyle = LockFontStyle.SANS,
     val isLockQuickActionsEnabled: Boolean = true,
     val lockTimeoutSeconds: Int = 30, // 0 = 즉시, 30 = 30초, 60 = 1분, 300 = 5분
     val isStealthPattern: Boolean = false, // Hide line while drawing pattern
@@ -76,6 +106,18 @@ data class LockConfig(
     val scheduleStartMinute: Int = 0,
     val scheduleEndHour: Int = 18,
     val scheduleEndMinute: Int = 0
+)
+
+/**
+ * 개인 확인 질문 기반 복구용 질문.
+ * 답변은 해시로만 보관하므로 앱을 열어도 답을 그대로 읽을 수 없다.
+ */
+data class RecoveryQuestion(
+    val id: String,
+    val prompt: String,
+    val answerHash: String,
+    val salt: String,
+    val hint: String? = null
 )
 
 data class EncryptedVaultFile(

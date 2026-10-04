@@ -38,6 +38,11 @@ import com.example.model.AiGuardFallback
 import com.example.util.InstalledAppsManager
 import com.example.util.IntruderCameraHelper
 import com.example.util.LockNotificationHelper
+import com.example.util.RecoveryQuestionManager
+import com.example.util.RecoveryKeyManager
+import com.example.ui.components.RecoveryVerifyDialog
+import com.example.ui.components.RecoveryMethodChooserDialog
+import com.example.ui.components.RecoveryKeyVerifyDialog
 
 class LockActivity : FragmentActivity() {
 
@@ -80,10 +85,43 @@ class LockActivity : FragmentActivity() {
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
     }
 
+    // 복구 인증 다이얼로그 표시 여부 (잠금 비밀번호를 잊었을 때)
+    private var showRecoveryVerify by mutableStateOf(false)
+    private var recoveryStep by mutableStateOf(RecoveryStep.CHOOSER)
+
+    private enum class RecoveryStep { CHOOSER, QUESTIONS, KEY }
+
+    /** 복구 인증 성공 후 공통 처리. 비밀번호 변경을 강력히 권장한다. */
+    private fun showRecoveredDialog(title: String, message: String) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("확인") { _, _ ->
+                completeUnlock()
+                Toast.makeText(this, "복구 인증으로 잠금을 해제했습니다.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("취소") { _, _ -> showRecoveryVerify = false }
+            .show()
+    }
+
+    /** 기록에 남길 해제 방식. 인증 분기마다 갱신된다. */
+    private var usedUnlockMethod: String = "잠금 해제"
+
     private fun completeUnlock() {
         AppLockPreferences.setDuressSession(this, false)
+        // 성공했으므로 실패 횟수와 잠금 페널티를 초기화한다.
+        AppLockPreferences.clearFailedAttempts(this)
         if (targetPackage.isNotEmpty()) {
             AppLockPreferences.setTemporarilyUnlocked(targetPackage)
+            // 실행 기록 타임라인에 남긴다 (잠금 해제 이력 추적용).
+            runCatching {
+                AppLockPreferences.recordSession(
+                    context = this,
+                    packageName = targetPackage,
+                    appName = appName,
+                    method = usedUnlockMethod
+                )
+            }
             if (AppLockPreferences.isPrivacyShadeAutoEnabled(this, targetPackage)) {
                 PrivacyShadeOverlayService.start(this)
             }
@@ -116,12 +154,121 @@ class LockActivity : FragmentActivity() {
             MyApplicationTheme {
                 val lockConfig = AppLockPreferences.getLockConfig(this@LockActivity)
 
+                // 복구 인증 처리
+                if (showRecoveryVerify) {
+                    val blockedMs = RecoveryQuestionManager.blockedRemainingMs(this@LockActivity)
+                    val questions = RecoveryQuestionManager.getQuestions(this@LockActivity)
+                    val hasKey = RecoveryKeyManager.hasKey(this@LockActivity)
+
+                    // 복구 수단 선택 → 해당 수단으로 진행
+                    if (recoveryStep == RecoveryStep.CHOOSER) {
+                        RecoveryMethodChooserDialog(
+                            hasQuestions = questions.isNotEmpty(),
+                            hasKey = hasKey,
+                            onUseQuestions = {
+                                if (blockedMs > 0L) {
+                                    val minutes = blockedMs / 60_000L + 1
+                                    Toast.makeText(this@LockActivity, "복구 시도가 잠겨 있습니다. 약 ${minutes}분 후 다시 시도해 주세요.", Toast.LENGTH_LONG).show()
+                                } else recoveryStep = RecoveryStep.QUESTIONS
+                            },
+                            onUseKey = { recoveryStep = RecoveryStep.KEY },
+                            onDismiss = { showRecoveryVerify = false }
+                        )
+                    }
+
+                    // 12자리 복구키: 추적이 어려우므로 시도 제한을 두지 않는다.
+                    if (recoveryStep == RecoveryStep.KEY) {
+                        RecoveryKeyVerifyDialog(
+                            failedAttempts = RecoveryKeyManager.failedAttempts(this@LockActivity),
+                            onSubmit = { input ->
+                                if (RecoveryKeyManager.verifyKey(this@LockActivity, input)) {
+                                    showRecoveryVerify = false
+                                    usedUnlockMethod = "12자리 복구키"
+                                    runCatching {
+                                        AppLockPreferences.recordSession(
+                                            context = this@LockActivity,
+                                            packageName = targetPackage,
+                                            appName = appName,
+                                            method = "12자리 복구키 인증"
+                                        )
+                                        AppLockPreferences.recordIntruderAttempt(
+                                            context = this@LockActivity,
+                                            packageName = targetPackage,
+                                            appName = appName,
+                                            attempts = 0,
+                                            usedLockType = "복구키로 잠금 해제"
+                                        )
+                                    }
+                                    showRecoveredDialog("복구키 인증 완료", "복구키로 인증되었습니다. 지금 잠금 비밀번호를 새로 설정하는 것을 강력히 권장합니다.")
+                                } else {
+                                    val attempts = RecoveryKeyManager.failedAttempts(this@LockActivity)
+                                    Toast.makeText(this@LockActivity, "복구키가 일치하지 않습니다. (누적 ${attempts}회)", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onDismiss = { recoveryStep = RecoveryStep.CHOOSER }
+                        )
+                    }
+
+                    if (recoveryStep == RecoveryStep.QUESTIONS && showRecoveryVerify) {
+                    when {
+                        questions.isEmpty() -> {
+                            showRecoveryVerify = false
+                            Toast.makeText(this@LockActivity, "등록된 복구 질문이 없습니다. 설정에서 먼저 등록해 주세요.", Toast.LENGTH_LONG).show()
+                        }
+                        blockedMs > 0L -> {
+                            showRecoveryVerify = false
+                            val minutes = (blockedMs / 60_000L + 1)
+                            Toast.makeText(this@LockActivity, "복구 시도가 잠겨 있습니다. 약 ${minutes}분 후에 다시 시도해 주세요.", Toast.LENGTH_LONG).show()
+                        }
+                        else -> RecoveryVerifyDialog(
+                            questions = questions,
+                            onSubmit = { answers ->
+                                if (RecoveryQuestionManager.verify(this@LockActivity, answers)) {
+                                    RecoveryQuestionManager.registerSuccess(this@LockActivity)
+                                    showRecoveryVerify = false
+                                    usedUnlockMethod = "개인 확인 질문 복구"
+                                    runCatching {
+                                        AppLockPreferences.recordSession(
+                                            context = this@LockActivity,
+                                            packageName = targetPackage,
+                                            appName = appName,
+                                            method = "개인 확인 질문 복구 인증"
+                                        )
+                                    }
+                                    // 복구했다는 사실은 침입 기록에도 남긴다.
+                                    runCatching {
+                                        AppLockPreferences.recordIntruderAttempt(
+                                            context = this@LockActivity,
+                                            packageName = targetPackage,
+                                            appName = appName,
+                                            attempts = 0,
+                                            usedLockType = "복구 인증으로 잠금 해제"
+                                        )
+                                    }
+                                    showRecoveredDialog("복구 인증 완료", "개인 확인 질문으로 인증되었습니다. 지금 잠금 비밀번호를 새로 설정하는 것을 강력히 권장합니다.")
+                                } else {
+                                    val locked = RecoveryQuestionManager.registerFailure(this@LockActivity)
+                                    Toast.makeText(
+                                        this@LockActivity,
+                                        if (locked) "답이 일치하지 않습니다. 복구 시도가 잠겨 1시간 동안 사용할 수 없습니다."
+                                        else "답이 일치하지 않습니다.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            },
+                            onDismiss = { recoveryStep = RecoveryStep.CHOOSER }
+                        )
+                    }
+                    }
+                }
+
                 androidx.compose.runtime.LaunchedEffect(lockConfig.biometricEnabled) {
                     if (lockConfig.biometricEnabled && BiometricHelper.isBiometricAvailable(this@LockActivity)) {
                         kotlinx.coroutines.delay(300)
                         requestBiometricUnlock(
                             appName = appName,
                             onSuccess = {
+                                usedUnlockMethod = "생체 인증"
                                 completeUnlock()
                                 Toast.makeText(this@LockActivity, "생체 인증 성공!", Toast.LENGTH_SHORT).show()
                             },
@@ -156,6 +303,13 @@ class LockActivity : FragmentActivity() {
                     lockBackgroundDim = lockConfig.lockBackgroundDim,
                     lockClockStyle = lockConfig.lockClockStyle,
                     lockAccent = lockConfig.lockAccent,
+                    lockPreset = lockConfig.lockPreset,
+                    lockBackgroundBlur = lockConfig.lockBackgroundBlur,
+                    lockPanelAlpha = lockConfig.lockPanelAlpha,
+                    lockCornerRadius = lockConfig.lockCornerRadius,
+                    lockClockPosition = lockConfig.lockClockPosition,
+                    lockIconShape = lockConfig.lockIconShape,
+                    lockFontStyle = lockConfig.lockFontStyle,
                     isLockQuickActionsEnabled = lockConfig.isLockQuickActionsEnabled,
                     biometricEnabled = lockConfig.biometricEnabled,
                     isStealthPattern = lockConfig.isStealthPattern,
@@ -163,12 +317,18 @@ class LockActivity : FragmentActivity() {
                     fakeScreenKind = fakeScreenKindFor(targetPackage, appName),
                     isVibrationEnabled = lockConfig.isVibrationEnabled,
                     isRandomPinKeypad = lockConfig.isRandomPinKeypad,
+                    initialLockoutRemainingMs = AppLockPreferences.getLockoutRemainingMs(this),
+                    onRequestRecovery = {
+                    recoveryStep = RecoveryStep.CHOOSER
+                    showRecoveryVerify = true
+                },
                     isIntruderSirenEnabled = lockConfig.isIntruderSirenEnabled,
                     deviceTiltDegrees = deviceTiltDegrees,
                     onRequestBiometric = {
                         requestBiometricUnlock(
                             appName = appName,
                             onSuccess = {
+                                usedUnlockMethod = "생체 인증"
                                 completeUnlock()
                                 Toast.makeText(this@LockActivity, "생체 인증 성공!", Toast.LENGTH_SHORT).show()
                             },
@@ -232,21 +392,26 @@ class LockActivity : FragmentActivity() {
     }
 
     private fun handleCredentialVerification(lockConfig: com.example.model.LockConfig, metrics: BehavioralInputMetrics) {
+        usedUnlockMethod = "AI 가드 인증"
         if (!lockConfig.isAiGuardEnabled) {
+            usedUnlockMethod = "${lockConfig.lockType.title} 인증"
             completeUnlock()
             Toast.makeText(this, "인증 성공!", Toast.LENGTH_SHORT).show()
             return
         }
         when (BehavioralGuard.evaluateAndLearn(this, metrics, lockConfig.aiGuardSensitivity)) {
             BehavioralGuardResult.ADDITIONAL_AUTH_REQUIRED -> {
+                usedUnlockMethod = "AI 가드 추가 인증"
                 Toast.makeText(this, "AI 가드가 평소와 다른 입력 패턴을 감지했습니다. 추가 인증이 필요합니다.", Toast.LENGTH_LONG).show()
                 if (lockConfig.isAiGuardVoiceRecordingEnabled) AiGuardAudioRecorder.recordFiveSeconds(this)
                 when (lockConfig.aiGuardFallback) {
                     AiGuardFallback.DEVICE_CREDENTIAL -> BiometricHelper.authenticateDeviceCredential(this, onSuccess = {
+                        usedUnlockMethod = "AI 가드 → 기기 인증"
                         completeUnlock()
                         Toast.makeText(this, "기기 인증 성공!", Toast.LENGTH_SHORT).show()
                     }, onUnavailable = { requireAppLockReentry() })
                     AiGuardFallback.BIOMETRIC -> requestBiometricUnlock(appName, onSuccess = {
+                        usedUnlockMethod = "AI 가드 → 생체 인증"
                         completeUnlock()
                         Toast.makeText(this, "추가 인증 성공!", Toast.LENGTH_SHORT).show()
                     }, onFailed = { requireAppLockReentry() })
@@ -254,10 +419,12 @@ class LockActivity : FragmentActivity() {
                 }
             }
             BehavioralGuardResult.LEARNING -> {
+                usedUnlockMethod = "AI 가드 학습 중 통과"
                 completeUnlock()
                 Toast.makeText(this, "AI 가드가 정상 입력 패턴을 학습 중입니다.", Toast.LENGTH_SHORT).show()
             }
             BehavioralGuardResult.TRUSTED -> {
+                usedUnlockMethod = "AI 가드 신뢰 입력"
                 completeUnlock()
                 Toast.makeText(this, "AI 가드 인증 성공!", Toast.LENGTH_SHORT).show()
             }
@@ -311,6 +478,15 @@ class LockActivity : FragmentActivity() {
     }
 
     private fun recordFailedIntruderAttempt(lockConfig: com.example.model.LockConfig, attempts: Int, usedType: String) {
+        // 실패 횟수 한도(선택)에 걸리면 정해진 시간 동안 입력이 막힌다.
+        if (AppLockPreferences.recordFailedAttempt(this)) {
+            val minutes = AppLockPreferences.getLockoutMinutes(this)
+            Toast.makeText(
+                this,
+                "인증 ${AppLockPreferences.getMaxFailedAttempts(this)}회 실패로 ${minutes}분 동안 잠금이 차단됩니다.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
         // Evidence capture is independent of AI Guard: the first wrong credential can
         // create a short local audio/video record when the required permissions exist.
         if (attempts == 1 && targetPackage.isNotEmpty()) {

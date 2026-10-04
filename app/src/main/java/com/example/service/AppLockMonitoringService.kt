@@ -48,6 +48,24 @@ class AppLockMonitoringService : Service() {
     private var lastForegroundPackage = ""
     private var panicShakeDetector: PanicShakeDetector? = null
     private var faceDownDetector: FaceDownDetector? = null
+    private var lastClipboardPackage = ""
+    private var clipboardListener: android.content.ClipboardManager.OnPrimaryClipChangedListener? = null
+
+    /** 클립보드 자동 삭제 설정이 켜져 있을 때만 복사 이벤트를 듣는다. */
+    private fun updateClipboardListener() {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        if (clipboard == null) return
+        val enabled = AppLockPreferences.isClipboardAutoClearEnabled(applicationContext)
+        if (enabled && clipboardListener == null) {
+            clipboardListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
+                AppLockPreferences.recordClipboardCopy(applicationContext, lastForegroundPackage)
+            }
+            runCatching { clipboard.addPrimaryClipChangedListener(clipboardListener!!) }
+        } else if (!enabled && clipboardListener != null) {
+            runCatching { clipboard.removePrimaryClipChangedListener(clipboardListener!!) }
+            clipboardListener = null
+        }
+    }
 
     private val screenOffReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -68,6 +86,7 @@ class AppLockMonitoringService : Service() {
         } catch (_: Exception) {}
         updateShakeDetector()
         updateFaceDownDetector()
+        updateClipboardListener()
     }
 
     private fun updateFaceDownDetector() {
@@ -137,6 +156,7 @@ class AppLockMonitoringService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         updateShakeDetector()
         updateFaceDownDetector()
+        updateClipboardListener()
         startMonitoring()
         return START_STICKY
     }
@@ -168,6 +188,9 @@ class AppLockMonitoringService : Service() {
                             val isUninstallAttempt = AppLockPreferences.isUninstallProtectionEnabled(applicationContext) &&
                                     (currentPackage.contains("packageinstaller") || currentPackage == "com.google.android.packageinstaller" || currentPackage == "com.android.packageinstaller")
 
+                            // 클립보드 자동 삭제: 실제 복사 이벤트가 있을 때만 기록한다.
+                            // (Android 10+ 는 백그라운드 읽기를 막아 이벤트가 오지 않을 수 있다)
+
                             if (AppLockPreferences.isPackageLocked(applicationContext, currentPackage) || isUninstallAttempt) {
                                 if (AppLockPreferences.isScheduleLockActive(applicationContext) || !AppLockPreferences.isTemporarilyUnlocked(currentPackage)) {
                                     LockActivity.start(applicationContext, currentPackage)
@@ -181,12 +204,51 @@ class AppLockMonitoringService : Service() {
                 } catch (_: Exception) {
                     // Safe guard
                 }
+                clearClipboardIfExpired()
                 delay(150)
             }
         }
     }
 
-    private fun getTopPackage(usageStatsManager: UsageStatsManager): String {
+    /**
+ * 클립보드에 민감한 내용이 지정된 시간이 지나면 지운다.
+ * Android 10+ 는 백그라운드 클립보드 접근을 제한하므로, 실제로 비워지지 않으면
+ * 사용자에게 남은 위치를 알려주는 것으로 대신한다.
+ */
+private fun clearClipboardIfExpired() {
+    if (!AppLockPreferences.isClipboardAutoClearEnabled(applicationContext)) return
+    val pending = AppLockPreferences.pendingClipboardClear(applicationContext) ?: return
+    val (copiedAt, packageName) = pending
+    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+    val cleared = try {
+        clipboard?.clearPrimaryClip()
+        true
+    } catch (_: Exception) {
+        false
+    }
+    AppLockPreferences.clearClipboardRecord(applicationContext)
+    if (!cleared) {
+        // 백그라운드 제한으로 지우지 못한 경우에는 사용자가 직접 지울 수 있게 알린다.
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                applicationContext,
+                "클립보드를 자동으로 지우지 못했습니다. 잠금 화면 알림에서 직접 비워주세요.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    } else {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                applicationContext,
+                "${(System.currentTimeMillis() - copiedAt) / 1000}초 전에 복사한 내용을 클립보드에서 지웠습니다.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    lastClipboardPackage = packageName
+}
+
+private fun getTopPackage(usageStatsManager: UsageStatsManager): String {
         val endTime = System.currentTimeMillis()
         val startTime = endTime - 10_000
         val usageEvents = usageStatsManager.queryEvents(startTime, endTime) ?: return ""
@@ -211,5 +273,12 @@ class AppLockMonitoringService : Service() {
         try {
             unregisterReceiver(screenOffReceiver)
         } catch (_: Exception) {}
+        clipboardListener?.let { listener ->
+            runCatching {
+                (getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)
+                    ?.removePrimaryClipChangedListener(listener)
+            }
+        }
+        clipboardListener = null
     }
 }

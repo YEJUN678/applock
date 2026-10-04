@@ -1,0 +1,12 @@
+# 저장소는 LF로 정규화한다 (Windows 개발 / Linux CI 간 일관성).
+* text=auto eol=lf
+
+# 바이너리 파일은 변환하지 않는다.
+*.apk binary
+*.jks binary
+*.keystore binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.so binary

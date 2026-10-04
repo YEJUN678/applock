@@ -111,6 +111,7 @@ import com.example.model.LockConfig
 import com.example.model.LockType
 import com.example.model.AiGuardFallback
 import com.example.util.BehavioralGuard
+import com.example.util.AppSession
 import android.widget.Toast
 import android.widget.VideoView
 import android.widget.MediaController
@@ -121,8 +122,13 @@ import com.example.ui.components.ChangeCalculatorCodeModal
 import com.example.ui.components.ChangeKnockCodeModal
 import com.example.ui.components.ChangePasswordModal
 import com.example.ui.components.ChangePinModal
+import com.example.ui.components.AppScheduleSheet
+import com.example.ui.components.ClipboardAutoClearCard
+import com.example.ui.components.ExcludedAppsSheet
+import com.example.ui.components.FailedAttemptLimitCard
 import com.example.ui.components.NxNPatternLockView
 import com.example.ui.components.SecurityMetric
+import com.example.ui.components.SessionTimelineCard
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Checklist
@@ -185,6 +191,24 @@ fun AppLockerHomeScreen(
     onConfigureDuressPin: () -> Unit = {},
     onConfigureEmergencyContact: () -> Unit = {},
     onEditLockStyle: () -> Unit = {},
+    onOpenPermissionWizard: () -> Unit = {},
+    onOpenExcludedApps: () -> Unit = {},
+    onOpenAppSchedules: () -> Unit = {},
+    recoveryConfigured: Boolean = false,
+    onOpenRecoverySetup: () -> Unit = {},
+    recoveryKeyConfigured: Boolean = false,
+    recoveryKeyFailedAttempts: Int = 0,
+    onOpenRecoveryKeySetup: () -> Unit = {},
+    maxFailedAttempts: Int = 0,
+    lockoutMinutes: Int = 5,
+    onChangeMaxFailedAttempts: (Int) -> Unit = {},
+    onChangeLockoutMinutes: (Int) -> Unit = {},
+    clipboardAutoClearEnabled: Boolean = false,
+    clipboardClearSeconds: Int = 60,
+    onToggleClipboardAutoClear: (Boolean) -> Unit = {},
+    onChangeClipboardClearSeconds: (Int) -> Unit = {},
+    sessionLog: List<AppSession> = emptyList(),
+    onClearSessionLog: () -> Unit = {},
     onToggleNotificationPrivacy: (Boolean) -> Unit = {},
     isFaceDownProtectionEnabled: Boolean = false,
     onToggleFaceDownProtection: (Boolean) -> Unit = {},
@@ -856,6 +880,24 @@ fun AppLockerHomeScreen(
                             onConfigureDuressPin = onConfigureDuressPin,
                             onConfigureEmergencyContact = onConfigureEmergencyContact,
                             onEditLockStyle = onEditLockStyle,
+                            onOpenPermissionWizard = onOpenPermissionWizard,
+                            onOpenExcludedApps = onOpenExcludedApps,
+                            onOpenAppSchedules = onOpenAppSchedules,
+                            recoveryConfigured = recoveryConfigured,
+                            onOpenRecoverySetup = onOpenRecoverySetup,
+                            recoveryKeyConfigured = recoveryKeyConfigured,
+                            recoveryKeyFailedAttempts = recoveryKeyFailedAttempts,
+                            onOpenRecoveryKeySetup = onOpenRecoveryKeySetup,
+                            maxFailedAttempts = maxFailedAttempts,
+                            lockoutMinutes = lockoutMinutes,
+                            onChangeMaxFailedAttempts = onChangeMaxFailedAttempts,
+                            onChangeLockoutMinutes = onChangeLockoutMinutes,
+                            clipboardAutoClearEnabled = clipboardAutoClearEnabled,
+                            clipboardClearSeconds = clipboardClearSeconds,
+                            onToggleClipboardAutoClear = onToggleClipboardAutoClear,
+                            onChangeClipboardClearSeconds = onChangeClipboardClearSeconds,
+                            sessionLog = sessionLog,
+                            onClearSessionLog = onClearSessionLog,
                             onToggleNotificationPrivacy = onToggleNotificationPrivacy,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
@@ -1035,6 +1077,24 @@ fun SettingsView(
     onConfigureDuressPin: () -> Unit = {},
     onConfigureEmergencyContact: () -> Unit = {},
     onEditLockStyle: () -> Unit = {},
+    onOpenPermissionWizard: () -> Unit = {},
+    onOpenExcludedApps: () -> Unit = {},
+    onOpenAppSchedules: () -> Unit = {},
+    recoveryConfigured: Boolean = false,
+    onOpenRecoverySetup: () -> Unit = {},
+    recoveryKeyConfigured: Boolean = false,
+    recoveryKeyFailedAttempts: Int = 0,
+    onOpenRecoveryKeySetup: () -> Unit = {},
+    maxFailedAttempts: Int = 0,
+    lockoutMinutes: Int = 5,
+    onChangeMaxFailedAttempts: (Int) -> Unit = {},
+    onChangeLockoutMinutes: (Int) -> Unit = {},
+    clipboardAutoClearEnabled: Boolean = false,
+    clipboardClearSeconds: Int = 60,
+    onToggleClipboardAutoClear: (Boolean) -> Unit = {},
+    onChangeClipboardClearSeconds: (Int) -> Unit = {},
+    sessionLog: List<AppSession> = emptyList(),
+    onClearSessionLog: () -> Unit = {},
     onToggleNotificationPrivacy: (Boolean) -> Unit = {},
     isFaceDownProtectionEnabled: Boolean = false,
     onToggleFaceDownProtection: (Boolean) -> Unit = {},
@@ -1437,6 +1497,11 @@ fun SettingsView(
                     OutlinedButton(onClick = onManageBackup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("재설치 백업 · 복원", color = NeonCyan, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = onShowRecoveryQr, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen), modifier = Modifier.fillMaxWidth()) { Text("오프라인 복구 QR 만들기", color = NeonGreen, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = onScanRecoveryQr, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("복구 QR 스캔", color = NeonAmber, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onOpenPermissionWizard, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed), modifier = Modifier.fillMaxWidth()) { Text("권한 설정 도우미 다시 보기", color = NeonRed, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onOpenExcludedApps, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("잠금 제외 앱 관리", color = NeonAmber, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onOpenAppSchedules, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("앱별 잠금 일정", color = NeonCyan, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onOpenRecoverySetup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, if (recoveryConfigured) NeonGreen else NeonAmber), modifier = Modifier.fillMaxWidth()) { Text(if (recoveryConfigured) "복구 질문 다시 설정 (등록됨)" else "비밀번호 잊었을 때 복구 질문 등록", color = if (recoveryConfigured) NeonGreen else NeonAmber, fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onClick = onOpenRecoveryKeySetup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, if (recoveryKeyConfigured) NeonGreen else NeonCyan), modifier = Modifier.fillMaxWidth()) { Text(if (recoveryKeyConfigured) "12자리 복구키 관리 (등록됨)" else "12자리 복구키 설정", color = if (recoveryKeyConfigured) NeonGreen else NeonCyan, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = onCheckForUpdates, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen), modifier = Modifier.fillMaxWidth()) { Text("업데이트 확인", color = NeonGreen, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = { onToggleNotificationPrivacy(!lockConfig.isNotificationPrivacyEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple), modifier = Modifier.fillMaxWidth()) { Text(if (lockConfig.isNotificationPrivacyEnabled) "잠긴 앱 알림 숨김: 켜짐" else "잠긴 앱 알림 숨김 켜기", color = NeonPurple, fontWeight = FontWeight.Bold) }
                     OutlinedButton(onClick = { onToggleFaceDownProtection(!isFaceDownProtectionEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text(if (isFaceDownProtectionEnabled) "뒤집기 보호: 켜짐" else "뒤집으면 즉시 잠금 켜기", color = NeonAmber, fontWeight = FontWeight.Bold) }
@@ -2390,6 +2455,25 @@ fun SettingsView(
                         Text(if (lockConfig.customLockBackgroundUri == null) "사진첩에서 배경 선택" else "선택한 사진 배경 바꾸기", color = NeonCyan, fontWeight = FontWeight.Bold)
                     }
                 }
+            }
+        }
+
+        // 8.5 개인정보 방어 확장 (제외 목록 · 클립보드 · 실행 기록)
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                FailedAttemptLimitCard(
+                    maxAttempts = maxFailedAttempts,
+                    lockoutMinutes = lockoutMinutes,
+                    onMaxAttemptsChange = onChangeMaxFailedAttempts,
+                    onLockoutMinutesChange = onChangeLockoutMinutes
+                )
+                ClipboardAutoClearCard(
+                    enabled = clipboardAutoClearEnabled,
+                    seconds = clipboardClearSeconds,
+                    onEnabledChange = onToggleClipboardAutoClear,
+                    onSecondsChange = onChangeClipboardClearSeconds
+                )
+                SessionTimelineCard(sessions = sessionLog, onClear = onClearSessionLog)
             }
         }
 

@@ -77,6 +77,36 @@ fun CalculatorDisguiseLockView(
     var pendingOperator by remember { mutableStateOf<String?>(null) }
     var typedDigits by remember { mutableStateOf("") }
     var justEvaluated by remember { mutableStateOf(false) }
+    // 실제 계산기처럼 계산 기록이 남는다 (앱을 껐다 켜도 유지되어 위장에 유리하다).
+    var history by remember {
+        mutableStateOf(
+            runCatching {
+                context.getSharedPreferences("calculator_disguise", android.content.Context.MODE_PRIVATE)
+                    .getString("history", "")
+                    ?.lines()
+                    ?.filter { it.isNotBlank() }
+                    ?.takeLast(20)
+                    ?: emptyList()
+            }.getOrDefault(emptyList())
+        )
+    }
+
+    fun pushHistory(line: String) {
+        val updated = (history + line).takeLast(20)
+        history = updated
+        runCatching {
+            context.getSharedPreferences("calculator_disguise", android.content.Context.MODE_PRIVATE)
+                .edit().putString("history", updated.joinToString("\n")).apply()
+        }
+    }
+
+    fun clearHistory() {
+        history = emptyList()
+        runCatching {
+            context.getSharedPreferences("calculator_disguise", android.content.Context.MODE_PRIVATE)
+                .edit().remove("history").apply()
+        }
+    }
 
     // 인증 실패 시 입력창을 비워 다시 입력할 수 있게 한다.
     LaunchedEffect(isError) {
@@ -170,8 +200,15 @@ fun CalculatorDisguiseLockView(
         val left = accumulator
         if (left != null && pending != null) {
             val right = display.toDoubleOrNull() ?: 0.0
-            display = format(calculate(left, pending, right))
+            val result = format(calculate(left, pending, right))
+            pushHistory("${format(left)} $pending ${format(right)} = $result")
+            display = result
             expression = "${format(left)} $pending ${format(right)} ="
+        } else if (expression.isNotBlank() && expression.endsWith(pendingOperator.orEmpty()) && pendingOperator != null) {
+            // 연산자만 누르고 = 를 누른 경우 (예: 5 + =)
+            val result = format(calculate(left ?: 0.0, pendingOperator ?: "+", display.toDoubleOrNull() ?: 0.0))
+            pushHistory("${format(left ?: 0.0)} $pendingOperator = $result")
+            display = result
         }
         accumulator = null
         pendingOperator = null
@@ -200,10 +237,29 @@ fun CalculatorDisguiseLockView(
     }
 
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp)
-    ) {
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp)
+        ) {
+        // 계산 기록 (실제 계산기와 동일하게 '=' 을 눌렀을 때만 쌓인다)
+        if (history.isNotEmpty()) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                history.takeLast(3).forEach { line ->
+                    Text(
+                        text = line,
+                        color = Color(0xFF7C8698),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+        }
         Surface(
             shape = RoundedCornerShape(22.dp),
             color = Color(0xFF161920),
@@ -285,19 +341,33 @@ fun CalculatorDisguiseLockView(
                                 )
                             }
 
-                            KeyKind.CLEAR -> CalculatorKey(
-                                label = label,
-                                background = Color(0xFF33222A),
-                                contentColor = NeonRed,
-                                borderColor = NeonRed.copy(alpha = 0.35f),
-                                fontSize = 19.sp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable(enabled = enabled) {
-                                        triggerHaptic()
-                                        resetAll()
-                                    }
-                            )
+                            KeyKind.CLEAR -> {
+                                val interactionSource = remember { MutableInteractionSource() }
+                                val pressed by interactionSource.collectIsPressedAsState()
+                                CalculatorKey(
+                                    label = label,
+                                    background = if (pressed) NeonRed.copy(alpha = 0.28f) else Color(0xFF33222A),
+                                    contentColor = NeonRed,
+                                    borderColor = NeonRed.copy(alpha = 0.35f),
+                                    fontSize = 19.sp,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .combinedClickable(
+                                            interactionSource = interactionSource,
+                                            indication = null,
+                                            enabled = enabled,
+                                            onClick = {
+                                                triggerHaptic()
+                                                resetAll()
+                                            },
+                                            // 길게 누르면 계산 기록까지 지운다 (은밀한 초기화)
+                                            onLongClick = {
+                                                triggerHaptic(durationMs = 45)
+                                                clearHistory()
+                                            }
+                                        )
+                                )
+                            }
 
                             KeyKind.BACKSPACE -> CalculatorKey(
                                 label = label,

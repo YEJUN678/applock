@@ -46,11 +46,19 @@ import com.example.service.PrivacyShadeOverlayService
 import com.example.ui.components.PrivacyScreenFilter
 import com.example.ui.components.CalculatorDisguiseLockView
 import com.example.ui.components.UpdateInstallDialog
+import com.example.ui.components.RecoveryKeySetupDialog
+import com.example.ui.components.RecoverySetupDialog
+import com.example.ui.components.AppScheduleSheet
+import com.example.ui.components.ExcludedAppsSheet
 import com.example.ui.components.LockScreenEditor
+import com.example.ui.components.PermissionSetupWizard
+import com.example.ui.components.PermissionStep
 import com.example.ui.screens.AppLockerHomeScreen
 import com.example.ui.screens.FileVaultScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.util.AppLockPermissionHelper
+import com.example.util.RecoveryQuestionManager
+import com.example.util.RecoveryKeyManager
 import com.example.util.AppLockPreferences
 import com.example.util.InstalledAppsManager
 import com.example.util.IntruderCameraHelper
@@ -305,6 +313,19 @@ class MainActivity : FragmentActivity() {
     private val selectBackupFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) { pendingRestoreUri = uri; askBackupPassword("백업 복원", false) }
     }
+    private val requestPostNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) Toast.makeText(this, "알림을 끄면 잠금 상태를 알려주는 알림이 표시되지 않습니다.", Toast.LENGTH_LONG).show()
+    }
+
+    /** 권한 도우미에서 '알림 표시' 항목을 눌렀을 때 호출. */
+    fun requestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            runCatching { requestPostNotifications.launch("android.permission.POST_NOTIFICATIONS") }
+                .onFailure { AppLockPermissionHelper.launchSettings(this, AppLockPermissionHelper.getAppDetailsSettingsIntent(this)) }
+        } else {
+            AppLockPermissionHelper.launchSettings(this, AppLockPermissionHelper.getAppDetailsSettingsIntent(this))
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Do not expose vault, lock settings, or intruder logs through screenshots,
@@ -373,23 +394,28 @@ class MainActivity : FragmentActivity() {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { AppUpdateManager.check() } }
             val update = result.getOrNull()
+            val error = result.exceptionOrNull()
             when {
-                update == null && !silent -> Toast.makeText(
+                error != null && !silent -> Toast.makeText(
                     this@MainActivity,
-                    "업데이트 정보를 가져오지 못했습니다: ${result.exceptionOrNull()?.message ?: "인터넷 연결을 확인하세요."}",
+                    error.message ?: "업데이트 정보를 가져오지 못했습니다.",
                     Toast.LENGTH_LONG
                 ).show()
                 update == null -> Unit
-                update.versionCode > BuildConfig.VERSION_CODE -> showUpdateAvailable(update)
-                !silent -> {
-                    // This is intentionally visible while testing releases: it makes the
-                    // strict version-code comparison obvious rather than looking broken.
-                    Toast.makeText(
-                        this@MainActivity,
-                        "최신 버전입니다. 설치됨 ${BuildConfig.VERSION_NAME} · 서버 ${update.versionName}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                AppUpdateManager.isUpdateAvailable(update, BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME) ->
+                    showUpdateAvailable(update)
+                // 이름은 더 새 버전인데 버전코드가 낮으면 Android 가 설치를 거부하므로
+                // 갱신으로 인정하지 않는다. 대신 배포 쪽 설정 오류를 그대로 알린다.
+                AppUpdateManager.isVersionNameNewer(update.versionName, BuildConfig.VERSION_NAME) && !silent -> Toast.makeText(
+                    this@MainActivity,
+                    "서버 버전(${update.versionName})은 더 새 버전인데 버전코드(${update.versionCode})가 설치됨(${BuildConfig.VERSION_CODE}) 이하라 업데이트로 보지 않습니다. versions.txt 의 versionCode 를 정수로 올려 주세요.",
+                    Toast.LENGTH_LONG
+                ).show()
+                !silent -> Toast.makeText(
+                    this@MainActivity,
+                    "최신 버전입니다. 설치됨 ${BuildConfig.VERSION_NAME}(${BuildConfig.VERSION_CODE}) · 서버 ${update.versionName}(${update.versionCode})",
+                    Toast.LENGTH_LONG
+                ).show()
                 else -> Unit
             }
         }
@@ -478,6 +504,18 @@ fun AppLockerApp(
     var hasUsageStatsPermission by remember {
         mutableStateOf(AppLockPermissionHelper.hasUsageStatsPermission(context))
     }
+    var hasNotificationListenerPermission by remember {
+        mutableStateOf(AppLockPermissionHelper.hasNotificationListenerPermission(context))
+    }
+    var isBatteryExempt by remember {
+        mutableStateOf(AppLockPermissionHelper.hasBatteryOptimizationExemption(context))
+    }
+    var canPostNotifications by remember {
+        mutableStateOf(AppLockPermissionHelper.canPostNotifications(context))
+    }
+    var canInstallPackages by remember {
+        mutableStateOf(AppLockPermissionHelper.canRequestPackageInstalls(context))
+    }
 
     var lockConfig by remember {
         mutableStateOf(AppLockPreferences.getLockConfig(context))
@@ -489,9 +527,32 @@ fun AppLockerApp(
 
     var showVaultScreen by remember { mutableStateOf(false) }
     var showLockScreenEditor by remember { mutableStateOf(false) }
+    // 시작할 때 표시되는 권한 튜토리얼. 필수 권한이 모두 갖춰졌거나 한 번 닫으면 다시 뜨지 않는다.
+    var showPermissionWizard by remember {
+        val prefs = context.getSharedPreferences("onboarding", android.content.Context.MODE_PRIVATE)
+        val seen = prefs.getBoolean("wizard_seen", false)
+        val missingRequired = !AppLockPermissionHelper.hasAccessibilityPermission(context) ||
+                !AppLockPermissionHelper.hasOverlayPermission(context)
+        mutableStateOf(!seen && missingRequired)
+    }
     var isPrivacyFilterActive by remember { mutableStateOf(false) }
     var isDuressMode by remember { mutableStateOf(AppLockPreferences.isDuressSession(context)) }
     var faceDownProtectionEnabled by remember { mutableStateOf(AppLockPreferences.isFaceDownProtectionEnabled(context)) }
+    // 개인정보 방어 확장 상태
+    var excludedPackages by remember { mutableStateOf(AppLockPreferences.getExcludedPackages(context)) }
+    var clipboardAutoClearEnabled by remember { mutableStateOf(AppLockPreferences.isClipboardAutoClearEnabled(context)) }
+    var clipboardClearSeconds by remember { mutableStateOf(AppLockPreferences.clipboardClearSeconds(context)) }
+    var sessionLog by remember { mutableStateOf(AppLockPreferences.getSessionLog(context)) }
+    var showExcludedAppsSheet by remember { mutableStateOf(false) }
+    var showAppScheduleSheet by remember { mutableStateOf(false) }
+    var appSchedules by remember { mutableStateOf(AppLockPreferences.getAppSchedules(context)) }
+    var maxFailedAttempts by remember { mutableStateOf(AppLockPreferences.getMaxFailedAttempts(context)) }
+    var lockoutMinutes by remember { mutableStateOf(AppLockPreferences.getLockoutMinutes(context)) }
+    var recoveryConfigured by remember { mutableStateOf(RecoveryQuestionManager.isConfigured(context)) }
+    var showRecoverySetup by remember { mutableStateOf(false) }
+    var recoveryKeyConfigured by remember { mutableStateOf(RecoveryKeyManager.hasKey(context)) }
+    var recoveryKeyFailedAttempts by remember { mutableStateOf(RecoveryKeyManager.failedAttempts(context)) }
+    var showRecoveryKeySetup by remember { mutableStateOf(false) }
 
     // Panic Shake Detector listener: immediately resets all temporary unlocks on vigorous shake
     DisposableEffect(lockConfig.isPanicShakeEnabled, lockConfig.panicShakeStrength, lifecycleOwner) {
@@ -529,7 +590,13 @@ fun AppLockerApp(
                 hasOverlayPermission = AppLockPermissionHelper.hasOverlayPermission(context)
                 hasAccessibilityPermission = AppLockPermissionHelper.hasAccessibilityPermission(context)
                 hasUsageStatsPermission = AppLockPermissionHelper.hasUsageStatsPermission(context)
+                hasNotificationListenerPermission = AppLockPermissionHelper.hasNotificationListenerPermission(context)
+                isBatteryExempt = AppLockPermissionHelper.hasBatteryOptimizationExemption(context)
+                canPostNotifications = AppLockPermissionHelper.canPostNotifications(context)
+                canInstallPackages = AppLockPermissionHelper.canRequestPackageInstalls(context)
                 intruderLogs = AppLockPreferences.getIntruderLogs(context)
+                sessionLog = AppLockPreferences.getSessionLog(context)
+                excludedPackages = AppLockPreferences.getExcludedPackages(context)
                 val currentConfig = AppLockPreferences.getLockConfig(context)
                 lockConfig = currentConfig
                 isDuressMode = AppLockPreferences.isDuressSession(context)
@@ -793,6 +860,47 @@ fun AppLockerApp(
                 onConfigureDuressPin = { (context as? MainActivity)?.showDuressPinSetup() },
                 onConfigureEmergencyContact = { (context as? MainActivity)?.showEmergencyContactSetup() },
                 onEditLockStyle = { showLockScreenEditor = true },
+                onOpenPermissionWizard = {
+                    context.getSharedPreferences("onboarding", android.content.Context.MODE_PRIVATE)
+                        .edit().putBoolean("wizard_seen", true).apply()
+                    showPermissionWizard = true
+                },
+                onOpenExcludedApps = { showExcludedAppsSheet = true },
+                onOpenAppSchedules = { showAppScheduleSheet = true },
+                recoveryConfigured = recoveryConfigured,
+                onOpenRecoverySetup = { showRecoverySetup = true },
+                recoveryKeyConfigured = recoveryKeyConfigured,
+                recoveryKeyFailedAttempts = recoveryKeyFailedAttempts,
+                onOpenRecoveryKeySetup = { showRecoveryKeySetup = true },
+                maxFailedAttempts = maxFailedAttempts,
+                lockoutMinutes = lockoutMinutes,
+                onChangeMaxFailedAttempts = { value ->
+                    maxFailedAttempts = value
+                    AppLockPreferences.setMaxFailedAttempts(context, value)
+                    onShowToast(if (value == 0) "실패 횟수 제한을 껐습니다." else "인증 ${value}회 실패 시 잠금이 차단됩니다.")
+                },
+                onChangeLockoutMinutes = { value ->
+                    lockoutMinutes = value
+                    AppLockPreferences.setLockoutMinutes(context, value)
+                },
+                clipboardAutoClearEnabled = clipboardAutoClearEnabled,
+                clipboardClearSeconds = clipboardClearSeconds,
+                onToggleClipboardAutoClear = { enabled ->
+                    clipboardAutoClearEnabled = enabled
+                    AppLockPreferences.setClipboardAutoClear(context, enabled, clipboardClearSeconds)
+                    onShowToast(if (enabled) "클립보드 자동 삭제를 켰습니다." else "클립보드 자동 삭제를 껐습니다.")
+                    AppLockMonitoringService.startService(context)
+                },
+                onChangeClipboardClearSeconds = { seconds ->
+                    clipboardClearSeconds = seconds
+                    AppLockPreferences.setClipboardAutoClear(context, clipboardAutoClearEnabled, seconds)
+                },
+                sessionLog = sessionLog,
+                onClearSessionLog = {
+                    AppLockPreferences.clearSessionLog(context)
+                    sessionLog = emptyList()
+                    onShowToast("실행 기록을 지웠습니다.")
+                },
                 onToggleNotificationPrivacy = { enabled -> (context as? MainActivity)?.setNotificationPrivacy(enabled) },
                 isFaceDownProtectionEnabled = faceDownProtectionEnabled,
                 onToggleFaceDownProtection = { enabled ->
@@ -814,6 +922,162 @@ fun AppLockerApp(
                     AppLockPreferences.saveLockConfig(context, updated)
                     showLockScreenEditor = false
                     onShowToast("잠금 화면 스타일을 저장했습니다.")
+                }
+            )
+        }
+
+        if (showExcludedAppsSheet) {
+            ExcludedAppsSheet(
+                apps = appsList,
+                excludedPackages = excludedPackages,
+                onToggle = { packageName, excluded ->
+                    AppLockPreferences.setPackageExcluded(context, packageName, excluded)
+                    excludedPackages = AppLockPreferences.getExcludedPackages(context)
+                    if (excluded) {
+                        // 제외한 앱은 임시 해제를 회수해 다음 실행부터 확실히 제외되게 한다.
+                        AppLockPreferences.clearTemporarilyUnlocked(packageName)
+                    }
+                },
+                onDismiss = { showExcludedAppsSheet = false }
+            )
+        }
+
+        if (showRecoveryKeySetup) {
+            RecoveryKeySetupDialog(
+                alreadyConfigured = recoveryKeyConfigured,
+                failedAttempts = recoveryKeyFailedAttempts,
+                onSave = { key ->
+                    if (RecoveryKeyManager.setKey(context, key)) {
+                        recoveryKeyConfigured = true
+                        recoveryKeyFailedAttempts = 0
+                        onShowToast("12자리 복구키를 저장했습니다. 해시로만 보관됩니다.")
+                    } else {
+                        onShowToast("12자리 숫자로 입력해 주세요.")
+                    }
+                },
+                onClear = {
+                    RecoveryKeyManager.clearKey(context)
+                    recoveryKeyConfigured = false
+                    onShowToast("복구키를 삭제했습니다.")
+                },
+                onDismiss = { showRecoveryKeySetup = false }
+            )
+        }
+
+        if (showRecoverySetup) {
+            RecoverySetupDialog(
+                alreadyConfigured = recoveryConfigured,
+                onSave = { answers ->
+                    RecoveryQuestionManager.setAnswers(context, answers)
+                    recoveryConfigured = RecoveryQuestionManager.isConfigured(context)
+                    onShowToast("복구 질문을 저장했습니다. 답은 해시로만 보관됩니다.")
+                },
+                onClear = {
+                    RecoveryQuestionManager.clear(context)
+                    recoveryConfigured = false
+                    onShowToast("복구 질문을 삭제했습니다.")
+                },
+                onDismiss = { showRecoverySetup = false }
+            )
+        }
+
+        if (showAppScheduleSheet) {
+            AppScheduleSheet(
+                apps = appsList,
+                schedules = appSchedules,
+                onSave = { packageName, schedule ->
+                    AppLockPreferences.setAppSchedule(context, packageName, schedule)
+                    appSchedules = AppLockPreferences.getAppSchedules(context)
+                    onShowToast(if (schedule == null) "잠금 일정을 삭제했습니다." else "잠금 일정을 저장했습니다.")
+                },
+                onDismiss = { showAppScheduleSheet = false }
+            )
+        }
+
+        if (showPermissionWizard) {
+            val permissionSteps = listOf(
+                PermissionStep(
+                    id = "accessibility",
+                    title = "접근성 서비스",
+                    requirement = "필수",
+                    why = "잠근 앱을 누르는 즉시 잠금 화면을 띄우고 뒤로가기로 빠져나가는 것을 차단합니다. 없으면 앱이 잠금 전에 한 번 실행됩니다.",
+                    granted = hasAccessibilityPermission,
+                    required = true,
+                    actionLabel = "설정 열기"
+                ),
+                PermissionStep(
+                    id = "overlay",
+                    title = "다른 앱 위에 표시",
+                    requirement = "필수",
+                    why = "접근성으로 못 잡는 순간(알림 shade,(split), 시스템 창)에 잠금 화면을 씌우는 최후 방어선입니다.",
+                    granted = hasOverlayPermission,
+                    required = true,
+                    actionLabel = "설정 열기"
+                ),
+                PermissionStep(
+                    id = "notification",
+                    title = "알림 표시",
+                    requirement = "권장",
+                    why = "잠금 상태, 침입 기록, 재잠금 알림을 시스템 알림으로 보여줍니다.",
+                    granted = canPostNotifications,
+                    required = false,
+                    actionLabel = "허용"
+                ),
+                PermissionStep(
+                    id = "notification_listener",
+                    title = "알림 접근",
+                    requirement = "권장",
+                    why = "잠긴 앱(메신저 등)의 알림 내용을 가려 다른 사람 눈에서 숨깁니다.",
+                    granted = hasNotificationListenerPermission,
+                    required = false,
+                    actionLabel = "설정 열기"
+                ),
+                PermissionStep(
+                    id = "usage_stats",
+                    title = "사용 정보 접근",
+                    requirement = "권장",
+                    why = "접근성 이벤트가 늦을 때 앱 실행을 감지하는 대체 경로입니다. 꺼도 동작하지만 감지가 느려집니다.",
+                    granted = hasUsageStatsPermission,
+                    required = false,
+                    actionLabel = "설정 열기"
+                ),
+                PermissionStep(
+                    id = "battery",
+                    title = "배터리 최적화 제외",
+                    requirement = "권장",
+                    why = "최적화로 프로세스가 정리되면 접근성/감시 서비스가 죽어 잠금이 느슨해집니다.",
+                    granted = isBatteryExempt,
+                    required = false,
+                    actionLabel = "설정 열기"
+                ),
+                PermissionStep(
+                    id = "install",
+                    title = "알 수 없는 소스 설치",
+                    requirement = "선택",
+                    why = "GitHub 에서 받는 업데이트 APK를 설치할 때만 필요합니다.",
+                    granted = canInstallPackages,
+                    required = false,
+                    actionLabel = "설정 열기"
+                )
+            )
+            PermissionSetupWizard(
+                steps = permissionSteps,
+                onLaunchPermission = { step ->
+                    when (step.id) {
+                        "accessibility" -> AppLockPermissionHelper.launchSettings(context, AppLockPermissionHelper.getAccessibilitySettingsIntent())
+                        "overlay" -> AppLockPermissionHelper.launchSettings(context, AppLockPermissionHelper.getOverlayPermissionIntent(context))
+                        "notification" -> (context as? MainActivity)?.requestNotificationPermission()
+                            ?: AppLockPermissionHelper.launchSettings(context, AppLockPermissionHelper.getAppDetailsSettingsIntent(context))
+                        "notification_listener" -> AppLockPermissionHelper.launchSettings(context, AppLockPermissionHelper.getNotificationListenerSettingsIntent())
+                        "usage_stats" -> AppLockPermissionHelper.launchSettings(context, AppLockPermissionHelper.getUsageStatsSettingsIntent())
+                        "battery" -> AppLockPermissionHelper.launchSettings(context, AppLockPermissionHelper.getBatteryOptimizationSettingsIntent())
+                        "install" -> AppLockPermissionHelper.launchSettings(context, AppLockPermissionHelper.getUnknownSourcesSettingsIntent(context))
+                    }
+                },
+                onFinish = {
+                    context.getSharedPreferences("onboarding", android.content.Context.MODE_PRIVATE)
+                        .edit().putBoolean("wizard_seen", true).apply()
+                    showPermissionWizard = false
                 }
             )
         }

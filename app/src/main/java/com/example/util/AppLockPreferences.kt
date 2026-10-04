@@ -9,6 +9,21 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
 
+/** 앱별 잠금 일정. 지정한 요일/시간 안에서만 그 앱을 잠근다. */
+data class AppSchedule(
+    val daysOfWeek: Set<Int>, // Calendar.DAY_OF_WEEK 값 (1=일요일)
+    val startMinute: Int,      // 0..1439
+    val endMinute: Int
+)
+
+/** 앱 잠금 해제 기록 한 건. 타임라인 화면에서 사용한다. */
+data class AppSession(
+    val packageName: String,
+    val appName: String,
+    val timestamp: Long,
+    val method: String
+)
+
 object AppLockPreferences {
     private const val PREFS_NAME = "app_lock_prefs"
     private const val KEY_LOCKED_PACKAGES = "locked_packages"
@@ -27,6 +42,13 @@ object AppLockPreferences {
     private const val KEY_LOCK_DIM = "lock_background_dim"
     private const val KEY_LOCK_CLOCK_STYLE = "lock_clock_style"
     private const val KEY_LOCK_ACCENT = "lock_accent"
+    private const val KEY_LOCK_PRESET = "lock_preset"
+    private const val KEY_LOCK_BLUR = "lock_background_blur"
+    private const val KEY_LOCK_PANEL_ALPHA = "lock_panel_alpha"
+    private const val KEY_LOCK_CORNER = "lock_corner_radius"
+    private const val KEY_LOCK_CLOCK_POSITION = "lock_clock_position"
+    private const val KEY_LOCK_ICON_SHAPE = "lock_icon_shape"
+    private const val KEY_LOCK_FONT_STYLE = "lock_font_style"
     private const val KEY_LOCK_QUICK_ACTIONS = "lock_quick_actions"
     private const val KEY_TIMEOUT = "lock_timeout_seconds"
     private const val KEY_STEALTH_PATTERN = "stealth_pattern"
@@ -59,6 +81,16 @@ object AppLockPreferences {
     private const val KEY_FACE_DOWN_PROTECTION = "face_down_protection"
     private const val KEY_INTRUDER_LOGS = "intruder_logs"
     private const val KEY_PRIVACY_AUTO_PACKAGES = "privacy_auto_packages"
+    private const val KEY_EXCLUDED_PACKAGES = "excluded_packages"
+    private const val KEY_SESSION_LOG = "session_log"
+    private const val KEY_CLIPBOARD_LAST = "clipboard_last_copy"
+    private const val KEY_CLIPBOARD_ENABLED = "clipboard_auto_clear"
+    private const val KEY_CLIPBOARD_SECONDS = "clipboard_clear_seconds"
+    private const val KEY_MAX_FAILED_ATTEMPTS = "max_failed_attempts"
+    private const val KEY_LOCKOUT_MINUTES = "lockout_minutes"
+    private const val KEY_FAILED_COUNTER = "failed_attempt_counter"
+    private const val KEY_LOCKOUT_UNTIL = "lockout_until"
+    private const val KEY_APP_SCHEDULES = "app_schedules"
 
     // In-memory cache for fast accessibility lookup
     @Volatile
@@ -85,7 +117,244 @@ object AppLockPreferences {
 
     @Synchronized
     fun isPackageLocked(context: Context, packageName: String): Boolean {
-        return getLockedPackages(context).contains(packageName)
+        // 잠금 제외 앱은 어떤 경로로도 잠금 판정을 하지 않는다 (단일 관문점).
+        if (isPackageExcluded(context, packageName)) return false
+        if (!getLockedPackages(context).contains(packageName)) return false
+        // 앱별 일정이 있으면 "지정 시간 안에서만" 잠금한다.
+        val schedule = getAppSchedule(context, packageName)
+        return schedule == null || isScheduleActive(schedule)
+    }
+
+    // --- 실패 횟수 제한 / 잠금 페널티 ---
+
+    /** 0 이면 제한 없음. */
+    fun getMaxFailedAttempts(context: Context): Int =
+        getPrefs(context).getInt(KEY_MAX_FAILED_ATTEMPTS, 0).coerceIn(0, 20)
+
+    fun setMaxFailedAttempts(context: Context, attempts: Int) {
+        getPrefs(context).edit().putInt(KEY_MAX_FAILED_ATTEMPTS, attempts.coerceIn(0, 20)).apply()
+        if (attempts == 0) clearFailedAttempts(context)
+    }
+
+    fun getLockoutMinutes(context: Context): Int =
+        getPrefs(context).getInt(KEY_LOCKOUT_MINUTES, 5).coerceIn(1, 1440)
+
+    fun setLockoutMinutes(context: Context, minutes: Int) {
+        getPrefs(context).edit().putInt(KEY_LOCKOUT_MINUTES, minutes.coerceIn(1, 1440)).apply()
+    }
+
+    fun getFailedAttemptCounter(context: Context): Int =
+        getPrefs(context).getInt(KEY_FAILED_COUNTER, 0).coerceAtLeast(0)
+
+    /** 실패를 기록하고, 한도에 도달해 잠금이 걸렸으면 true 를 돌려준다. */
+    @Synchronized
+    fun recordFailedAttempt(context: Context): Boolean {
+        val prefs = getPrefs(context)
+        val limit = getMaxFailedAttempts(context)
+        if (limit <= 0) return false
+        val attempts = prefs.getInt(KEY_FAILED_COUNTER, 0) + 1
+        if (attempts < limit) {
+            prefs.edit().putInt(KEY_FAILED_COUNTER, attempts).apply()
+            return false
+        }
+        prefs.edit()
+            .putInt(KEY_FAILED_COUNTER, 0)
+            .putLong(KEY_LOCKOUT_UNTIL, System.currentTimeMillis() + getLockoutMinutes(context) * 60_000L)
+            .apply()
+        return true
+    }
+
+    /** 남은 잠금 시간. 0 이면 걸려 있지 않다. */
+    fun getLockoutRemainingMs(context: Context): Long {
+        val until = getPrefs(context).getLong(KEY_LOCKOUT_UNTIL, 0L)
+        if (until <= 0L) return 0L
+        val remaining = until - System.currentTimeMillis()
+        if (remaining <= 0L) {
+            getPrefs(context).edit().remove(KEY_LOCKOUT_UNTIL).apply()
+            return 0L
+        }
+        return remaining
+    }
+
+    /** 잠금 해제 성공 시 실패 기록을 초기화한다. */
+    fun clearFailedAttempts(context: Context) {
+        getPrefs(context).edit()
+            .remove(KEY_FAILED_COUNTER)
+            .remove(KEY_LOCKOUT_UNTIL)
+            .apply()
+    }
+
+    // --- 앱별 잠금 일정 ---
+
+    fun getAppSchedule(context: Context, packageName: String): AppSchedule? =
+        getAppSchedules(context)[packageName]
+
+    fun getAppSchedules(context: Context): Map<String, AppSchedule> {
+        val raw = getPrefs(context).getString(KEY_APP_SCHEDULES, null) ?: return emptyMap()
+        return runCatching {
+            val obj = JSONObject(raw)
+            val result = mutableMapOf<String, AppSchedule>()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val item = obj.getJSONObject(key)
+                val days = item.optJSONArray("days")?.let { array ->
+                    (0 until array.length()).map { array.getInt(it) }.toSet()
+                } ?: emptySet()
+                result[key] = AppSchedule(days, item.optInt("start", 0), item.optInt("end", 0))
+            }
+            result
+        }.getOrDefault(emptyMap())
+    }
+
+    /** schedule 이 null 이면 일정을 삭제한다. */
+    fun setAppSchedule(context: Context, packageName: String, schedule: AppSchedule?) {
+        val all = getAppSchedules(context).toMutableMap()
+        if (schedule == null) all.remove(packageName) else all[packageName] = schedule
+        if (all.isEmpty()) {
+            getPrefs(context).edit().remove(KEY_APP_SCHEDULES).apply()
+            return
+        }
+        val obj = JSONObject()
+        all.forEach { (pkg, value) ->
+            obj.put(pkg, JSONObject().apply {
+                put("days", JSONArray(value.daysOfWeek.toList()))
+                put("start", value.startMinute)
+                put("end", value.endMinute)
+            })
+        }
+        getPrefs(context).edit().putString(KEY_APP_SCHEDULES, obj.toString()).apply()
+    }
+
+    /** 자정을 넘는 구간도 처리한다. */
+    private fun isScheduleActive(schedule: AppSchedule): Boolean = isScheduleActive(schedule, Calendar.getInstance())
+
+    fun isScheduleActive(schedule: AppSchedule, now: Calendar): Boolean {
+        if (schedule.daysOfWeek.isEmpty()) return false
+        if (!schedule.daysOfWeek.contains(now.get(Calendar.DAY_OF_WEEK))) return false
+        val minute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+        val start = schedule.startMinute.coerceIn(0, 1439)
+        val end = schedule.endMinute.coerceIn(0, 1439)
+        return if (start == end) true else if (start < end) minute in start until end else minute >= start || minute < end
+    }
+
+    /** 지정 요일이면서 지금 잠금 구간이면 true. */
+    fun isAppScheduleLocked(context: Context, packageName: String, now: Calendar = Calendar.getInstance()): Boolean {
+        val schedule = getAppSchedule(context, packageName) ?: return false
+        return isScheduleActive(schedule, now)
+    }
+
+    // --- 잠금 제외(제외 목록) 앱 ---
+
+    @Synchronized
+    fun getExcludedPackages(context: Context): Set<String> {
+        val set = getPrefs(context).getStringSet(KEY_EXCLUDED_PACKAGES, emptySet()) ?: emptySet()
+        return set.toSet()
+    }
+
+    @Synchronized
+    fun isPackageExcluded(context: Context, packageName: String): Boolean =
+        getPrefs(context).getStringSet(KEY_EXCLUDED_PACKAGES, emptySet())?.contains(packageName) == true
+
+    /** 제외 목록에 있는 앱은 잠금 목록에 남아 있어도 잠금하지 않는다. */
+    @Synchronized
+    fun setPackageExcluded(context: Context, packageName: String, excluded: Boolean) {
+        val current = getExcludedPackages(context).toMutableSet()
+        if (excluded) current.add(packageName) else current.remove(packageName)
+        getPrefs(context).edit().putStringSet(KEY_EXCLUDED_PACKAGES, current).apply()
+    }
+
+    // --- 클립보드 자동 삭제 ---
+
+    fun isClipboardAutoClearEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_CLIPBOARD_ENABLED, false)
+
+    fun clipboardClearSeconds(context: Context): Int =
+        getPrefs(context).getInt(KEY_CLIPBOARD_SECONDS, 60).coerceIn(15, 600)
+
+    fun setClipboardAutoClear(context: Context, enabled: Boolean, seconds: Int = clipboardClearSeconds(context)) {
+        getPrefs(context).edit()
+            .putBoolean(KEY_CLIPBOARD_ENABLED, enabled)
+            .putInt(KEY_CLIPBOARD_SECONDS, seconds.coerceIn(15, 600))
+            .apply()
+    }
+
+    fun recordClipboardCopy(context: Context, packageName: String) {
+        val prefs = getPrefs(context)
+        val existing = prefs.getString(KEY_CLIPBOARD_LAST, null)
+        // Android 10+ 는 백그라운드 클립보드 읽기를 막아 값이 없을 수 있다.
+        // 이 경우에도 시각만 남겨 나중에 지울 수 있게 한다.
+        val label = try {
+            context.getSystemService(Context.CLIPBOARD_SERVICE)
+                ?.let { it as? android.content.ClipboardManager }
+                ?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
+                ?: existing?.let { JSONObject(it).optString("text") }
+        } catch (_: Exception) {
+            existing?.let { JSONObject(it).optString("text") }
+        }
+        val json = JSONObject().apply {
+            put("package", packageName)
+            put("at", System.currentTimeMillis())
+            if (label != null) put("text", label.take(120))
+        }
+        prefs.edit().putString(KEY_CLIPBOARD_LAST, json.toString()).apply()
+    }
+
+    /** 마지막 복사 시각. 지울 기한이 지났으면 내용을 반환한다. */
+    fun pendingClipboardClear(context: Context): Pair<Long, String>? {
+        val raw = getPrefs(context).getString(KEY_CLIPBOARD_LAST, null) ?: return null
+        return runCatching {
+            val obj = JSONObject(raw)
+            val at = obj.getLong("at")
+            val deadline = at + clipboardClearSeconds(context) * 1000L
+            if (System.currentTimeMillis() >= deadline) at to obj.optString("package") else null
+        }.getOrNull()
+    }
+
+    fun clearClipboardRecord(context: Context) {
+        getPrefs(context).edit().remove(KEY_CLIPBOARD_LAST).apply()
+    }
+
+    // --- 앱 실행 기록(타임라인) ---
+
+    fun recordSession(context: Context, packageName: String, appName: String, method: String) {
+        val prefs = getPrefs(context)
+        val existing = prefs.getString(KEY_SESSION_LOG, null)
+        val array = runCatching { JSONArray(existing ?: "[]") }.getOrDefault(JSONArray())
+        val entry = JSONObject().apply {
+            put("package", packageName)
+            put("name", appName)
+            put("at", System.currentTimeMillis())
+            put("method", method)
+        }
+        array.put(entry)
+        // 최근 100건만 유지 ( prefs 는 무제한으로 커지면 안 된다).
+        while (array.length() > 100) array.remove(0)
+        prefs.edit().putString(KEY_SESSION_LOG, array.toString()).apply()
+    }
+
+    fun getSessionLog(context: Context): List<AppSession> {
+        val raw = getPrefs(context).getString(KEY_SESSION_LOG, null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            val list = mutableListOf<AppSession>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    AppSession(
+                        packageName = obj.optString("package"),
+                        appName = obj.optString("name"),
+                        timestamp = obj.optLong("at"),
+                        method = obj.optString("method", "잠금 해제")
+                    )
+                )
+            }
+            list.reversed()
+        }.getOrDefault(emptyList())
+    }
+
+    fun clearSessionLog(context: Context) {
+        getPrefs(context).edit().remove(KEY_SESSION_LOG).apply()
     }
 
     @Synchronized
@@ -271,6 +540,13 @@ object AppLockPreferences {
         val dim = prefs.getFloat(KEY_LOCK_DIM, 0.82f).coerceIn(0.45f, 0.95f)
         val clockStyle = runCatching { com.example.model.LockClockStyle.valueOf(prefs.getString(KEY_LOCK_CLOCK_STYLE, com.example.model.LockClockStyle.LARGE.name)!!) }.getOrDefault(com.example.model.LockClockStyle.LARGE)
         val accent = runCatching { com.example.model.LockAccent.valueOf(prefs.getString(KEY_LOCK_ACCENT, com.example.model.LockAccent.CYAN.name)!!) }.getOrDefault(com.example.model.LockAccent.CYAN)
+        val preset = runCatching { com.example.model.LockPreset.valueOf(prefs.getString(KEY_LOCK_PRESET, com.example.model.LockPreset.ONE_UI.name)!!) }.getOrDefault(com.example.model.LockPreset.ONE_UI)
+        val blur = prefs.getFloat(KEY_LOCK_BLUR, preset.blur).coerceIn(0f, 1f)
+        val panelAlpha = prefs.getFloat(KEY_LOCK_PANEL_ALPHA, preset.panelAlpha).coerceIn(0f, 0.5f)
+        val corner = prefs.getFloat(KEY_LOCK_CORNER, preset.corner).coerceIn(8f, 40f)
+        val clockPosition = runCatching { com.example.model.LockClockPosition.valueOf(prefs.getString(KEY_LOCK_CLOCK_POSITION, preset.clockPosition.name)!!) }.getOrDefault(com.example.model.LockClockPosition.TOP_CENTER)
+        val iconShape = runCatching { com.example.model.LockIconShape.valueOf(prefs.getString(KEY_LOCK_ICON_SHAPE, preset.iconShape.name)!!) }.getOrDefault(com.example.model.LockIconShape.CIRCLE)
+        val fontStyle = runCatching { com.example.model.LockFontStyle.valueOf(prefs.getString(KEY_LOCK_FONT_STYLE, com.example.model.LockFontStyle.SANS.name)!!) }.getOrDefault(com.example.model.LockFontStyle.SANS)
         val quickActions = prefs.getBoolean(KEY_LOCK_QUICK_ACTIONS, true)
         val timeoutSeconds = prefs.getInt(KEY_TIMEOUT, 30)
         cachedTimeoutMs = timeoutSeconds * 1000L
@@ -313,6 +589,13 @@ object AppLockPreferences {
             lockBackgroundDim = dim,
             lockClockStyle = clockStyle,
             lockAccent = accent,
+            lockPreset = preset,
+            lockBackgroundBlur = blur,
+            lockPanelAlpha = panelAlpha,
+            lockCornerRadius = corner,
+            lockClockPosition = clockPosition,
+            lockIconShape = iconShape,
+            lockFontStyle = fontStyle,
             isLockQuickActionsEnabled = quickActions,
             lockTimeoutSeconds = timeoutSeconds,
             isStealthPattern = stealth,
@@ -360,6 +643,13 @@ object AppLockPreferences {
             .putFloat(KEY_LOCK_DIM, config.lockBackgroundDim)
             .putString(KEY_LOCK_CLOCK_STYLE, config.lockClockStyle.name)
             .putString(KEY_LOCK_ACCENT, config.lockAccent.name)
+            .putString(KEY_LOCK_PRESET, config.lockPreset.name)
+            .putFloat(KEY_LOCK_BLUR, config.lockBackgroundBlur)
+            .putFloat(KEY_LOCK_PANEL_ALPHA, config.lockPanelAlpha)
+            .putFloat(KEY_LOCK_CORNER, config.lockCornerRadius)
+            .putString(KEY_LOCK_CLOCK_POSITION, config.lockClockPosition.name)
+            .putString(KEY_LOCK_ICON_SHAPE, config.lockIconShape.name)
+            .putString(KEY_LOCK_FONT_STYLE, config.lockFontStyle.name)
             .putBoolean(KEY_LOCK_QUICK_ACTIONS, config.isLockQuickActionsEnabled)
             .putInt(KEY_TIMEOUT, config.lockTimeoutSeconds)
             .putBoolean(KEY_STEALTH_PATTERN, config.isStealthPattern)

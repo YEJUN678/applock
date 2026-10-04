@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -63,7 +64,11 @@ import androidx.compose.ui.unit.sp
 import com.example.model.BackgroundTheme
 import com.example.model.LockType
 import com.example.model.LockAccent
+import com.example.model.LockClockPosition
 import com.example.model.LockClockStyle
+import com.example.model.LockFontStyle
+import com.example.model.LockIconShape
+import com.example.model.LockPreset
 import com.example.ui.components.AppLockBackground
 import com.example.ui.components.CalculatorDisguiseLockView
 import com.example.ui.components.KnockCodeLockView
@@ -100,6 +105,13 @@ fun LockOverlayScreen(
     lockBackgroundDim: Float = 0.82f,
     lockClockStyle: LockClockStyle = LockClockStyle.LARGE,
     lockAccent: LockAccent = LockAccent.CYAN,
+    lockPreset: LockPreset = LockPreset.ONE_UI,
+    lockBackgroundBlur: Float = 0.55f,
+    lockPanelAlpha: Float = 0.16f,
+    lockCornerRadius: Float = 28f,
+    lockClockPosition: LockClockPosition = LockClockPosition.TOP_CENTER,
+    lockIconShape: LockIconShape = LockIconShape.CIRCLE,
+    lockFontStyle: LockFontStyle = LockFontStyle.SANS,
     isLockQuickActionsEnabled: Boolean = true,
     biometricEnabled: Boolean,
     isStealthPattern: Boolean = false,
@@ -109,6 +121,8 @@ fun LockOverlayScreen(
     isRandomPinKeypad: Boolean = false,
     isIntruderSirenEnabled: Boolean = false,
     deviceTiltDegrees: Float = 0f,
+    initialLockoutRemainingMs: Long = 0L,
+    onRequestRecovery: (() -> Unit)? = null,
     onRequestBiometric: (() -> Unit)? = null,
     onUnlockSuccess: () -> Unit,
     onCredentialVerified: ((BehavioralInputMetrics) -> Unit)? = null,
@@ -119,6 +133,27 @@ fun LockOverlayScreen(
     modifier: Modifier = Modifier
 ) {
     val accentColor = Color(lockAccent.hex)
+    // 프리셋에서 넘어온 세부 옵션을 실제 위젯 스타일로 옮긴다.
+    val lockFontFamily = when (lockFontStyle) {
+        LockFontStyle.SANS -> FontFamily.Default
+        LockFontStyle.SERIF -> FontFamily.Serif
+        LockFontStyle.MONO -> FontFamily.Monospace
+    }
+    val iconShape = when (lockIconShape) {
+        LockIconShape.CIRCLE -> CircleShape
+        LockIconShape.ROUNDED -> RoundedCornerShape((18 * lockIconScale).dp)
+        LockIconShape.SQUARE -> RoundedCornerShape(6.dp)
+    }
+    val clockAlignment = when (lockClockPosition) {
+        LockClockPosition.TOP_CENTER -> Alignment.CenterHorizontally
+        LockClockPosition.TOP_LEFT -> Alignment.Start
+        LockClockPosition.TOP_RIGHT -> Alignment.End
+    }
+    val clockBoxAlignment = when (lockClockPosition) {
+        LockClockPosition.TOP_CENTER -> Alignment.TopCenter
+        LockClockPosition.TOP_LEFT -> Alignment.TopStart
+        LockClockPosition.TOP_RIGHT -> Alignment.TopEnd
+    }
     var isError by remember { mutableStateOf(false) }
     var attemptCount by remember { mutableIntStateOf(0) }
     var messageText by remember {
@@ -134,6 +169,17 @@ fun LockOverlayScreen(
     }
     var showBiometricModal by remember { mutableStateOf(false) }
     var showFakeCrash by remember { mutableStateOf(isFakeCrashEnabled) }
+    // 실패 횟수 한도 초과로 잠긴 상태. 남은 시간이 0 이 되면 다시 입력할 수 있다.
+    var lockoutRemainingMs by remember { mutableStateOf(initialLockoutRemainingMs) }
+    LaunchedEffect(lockoutRemainingMs) {
+        while (lockoutRemainingMs > 0) {
+            delay(1000)
+            lockoutRemainingMs = (lockoutRemainingMs - 1000).coerceAtLeast(0L)
+        }
+    }
+    val lockoutSeconds = (lockoutRemainingMs / 1000).toInt()
+    val lockoutActive = lockoutSeconds > 0
+    val inputEnabled = !isError && !lockoutActive
 
     // This must be returned before the lock layout is composed.  The previous dialog
     // lived at the bottom of a Column, so it could be measured below the visible area.
@@ -173,7 +219,7 @@ fun LockOverlayScreen(
     }
 
 
-    AppLockBackground(theme = backgroundTheme, customImageUri = customBackgroundUri, dimAmount = lockBackgroundDim, modifier = modifier) {
+    AppLockBackground(theme = backgroundTheme, customImageUri = customBackgroundUri, dimAmount = lockBackgroundDim, blurAmount = lockBackgroundBlur, modifier = modifier) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -226,17 +272,47 @@ fun LockOverlayScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             if (lockClockStyle != LockClockStyle.HIDDEN) {
-                Text(java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date()), color = Color.White, fontSize = if (lockClockStyle == LockClockStyle.LARGE) 38.sp else 22.sp, fontWeight = FontWeight.Light)
-                Text(java.text.SimpleDateFormat("M월 d일 EEEE", java.util.Locale.KOREA).format(java.util.Date()), color = TextSecondary, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(12.dp))
+                Box(Modifier.fillMaxWidth(), contentAlignment = clockBoxAlignment) {
+                    Column(horizontalAlignment = clockAlignment) {
+                        Text(
+                            text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date()),
+                            color = Color.White,
+                            fontSize = when (lockClockStyle) {
+                                LockClockStyle.LARGE -> if (lockClockPosition == LockClockPosition.TOP_CENTER) 46.sp else 30.sp
+                                else -> 22.sp
+                            },
+                            fontWeight = FontWeight.Light,
+                            fontFamily = lockFontFamily
+                        )
+                        Text(
+                            text = java.text.SimpleDateFormat("M월 d일 EEEE", java.util.Locale.KOREA).format(java.util.Date()),
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            fontFamily = lockFontFamily
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
             }
+
+            // 아이콘 · 앱 이름 · 안내를 반투명 패널로 묶는다 (프리셋 모서리/투명도 반영)
+            Surface(
+                shape = RoundedCornerShape(lockCornerRadius.dp),
+                color = accentColor.copy(alpha = lockPanelAlpha.coerceIn(0f, 0.5f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, accentColor.copy(alpha = 0.22f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 20.dp)
+            ) {
 
             // App Icon and Title
             Surface(
-                shape = CircleShape,
+                shape = iconShape,
                 color = Color(0x4400F0FF),
                 modifier = Modifier.size((72 * lockIconScale).dp),
-                border = androidx.compose.foundation.BorderStroke(2.dp, NeonCyan)
+                border = androidx.compose.foundation.BorderStroke(2.dp, accentColor)
             ) {
                 val iconBitmap = remember(appIcon) {
                     appIcon?.let { icon ->
@@ -259,7 +335,7 @@ fun LockOverlayScreen(
                         Image(
                             bitmap = iconBitmap.asImageBitmap(),
                             contentDescription = appName,
-                            modifier = Modifier.size(46.dp)
+                            modifier = Modifier.size((46 * lockIconScale).dp)
                         )
                     } else {
                         Icon(
@@ -276,22 +352,28 @@ fun LockOverlayScreen(
 
             Text(
                 text = "$appName 잠금",
-                style = MaterialTheme.typography.headlineMedium,
                 color = TextPrimary,
-                fontWeight = FontWeight.Bold
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = lockFontFamily,
+                textAlign = TextAlign.Center
             )
-            if (lockMessage.isNotBlank()) Text(lockMessage, color = NeonCyan, fontSize = 13.sp, textAlign = TextAlign.Center)
+            if (lockMessage.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(lockMessage, color = accentColor, fontSize = 13.sp, textAlign = TextAlign.Center, fontFamily = lockFontFamily)
+            }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = messageText,
                 color = if (isError) NeonRed else TextSecondary,
                 fontSize = 14.sp,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                fontFamily = lockFontFamily
             )
             if (emergencyContact.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text("비상 연락: $emergencyContact", color = TextSecondary, fontSize = 12.sp, textAlign = TextAlign.Center)
             }
 
@@ -304,8 +386,38 @@ fun LockOverlayScreen(
                     fontWeight = FontWeight.Medium
                 )
             }
+            } // 패널 안 Column 끝
+            } // 반투명 패널(Surface) 끝
 
             Spacer(modifier = Modifier.weight(1f))
+
+            // 실패 횟수 한도 초과: 입력을 막고 남은 시간을 표시한다.
+            if (lockoutActive) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x33FF5252), RoundedCornerShape(16.dp))
+                        .padding(vertical = 18.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "잠금이 걸려 있습니다",
+                            color = NeonRed,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "%02d:%02d 후 다시 시도할 수 있습니다".format(lockoutSeconds / 60, lockoutSeconds % 60),
+                            color = Color.White,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Light,
+                            fontFamily = lockFontFamily
+                        )
+                    }
+                }
+            }
 
             // The Authentication Input: PIN, Pattern, Password, Calculator, or Knock Code
             when (lockType) {
@@ -313,7 +425,7 @@ fun LockOverlayScreen(
                     PinKeypadView(
                         targetLength = targetPin.length.coerceIn(4, 8),
                         isError = isError,
-                        enabled = !isError,
+                        enabled = inputEnabled,
                         isScrambleKeypad = isRandomPinKeypad,
                         isVibrationEnabled = isVibrationEnabled,
                         onPinCompleted = { enteredPin, metrics ->
@@ -344,7 +456,7 @@ fun LockOverlayScreen(
                     NxNPatternLockView(
                         gridSize = gridSize,
                         isError = isError,
-                        enabled = !isError,
+                        enabled = inputEnabled,
                         isStealthMode = isStealthPattern,
                         isVibrationEnabled = isVibrationEnabled,
                         onPatternCompleted = { drawnPattern ->
@@ -369,7 +481,7 @@ fun LockOverlayScreen(
                 LockType.PASSWORD -> {
                     PasswordLockView(
                         isError = isError,
-                        enabled = !isError,
+                        enabled = inputEnabled,
                         isVibrationEnabled = isVibrationEnabled,
                         onPasswordSubmitted = { enteredPassword, metrics ->
                             if (enteredPassword == targetPassword) {
@@ -391,7 +503,7 @@ fun LockOverlayScreen(
                 LockType.CALCULATOR -> {
                     CalculatorDisguiseLockView(
                         isError = isError,
-                        enabled = !isError,
+                        enabled = inputEnabled,
                         isVibrationEnabled = isVibrationEnabled,
                         onCodeSubmitted = { enteredCode ->
                             if (enteredCode == targetCalculatorCode || enteredCode == targetPin) {
@@ -414,7 +526,7 @@ fun LockOverlayScreen(
                     KnockCodeLockView(
                         targetKnockCode = targetKnockCode,
                         isError = isError,
-                        enabled = !isError,
+                        enabled = inputEnabled,
                         isVibrationEnabled = isVibrationEnabled,
                         onKnockCompleted = { enteredKnock ->
                             if (enteredKnock == targetKnockCode) {
@@ -484,6 +596,21 @@ fun LockOverlayScreen(
                     color = TextSecondary,
                     fontSize = 13.sp
                 )
+            }
+
+            // 비밀번호를 잊었을 때: 설정해 둔 개인 확인 질문으로만 복구할 수 있다.
+            if (onRequestRecovery != null) {
+                androidx.compose.material3.TextButton(
+                    onClick = onRequestRecovery,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "비밀번호를 잊으셨나요?",
+                        color = TextSecondary.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
