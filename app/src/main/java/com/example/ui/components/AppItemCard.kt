@@ -51,6 +51,13 @@ import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.util.AppLockPreferences
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.font.FontWeight
+import com.example.ui.theme.NeonAmber
+import com.example.ui.theme.NeonRed
+import com.example.ui.theme.CyberSurfaceDark
+import com.example.util.LockReasonStore
+import com.example.util.ScreenBlockStore
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -65,6 +72,10 @@ fun AppItemCard(
 ) {
     val context = LocalContext.current
     var autoPrivacy by remember(app.packageName) { mutableStateOf(AppLockPreferences.isPrivacyShadeAutoEnabled(context, app.packageName)) }
+    // 잠근 이유를 한 줄 메모로 남겨 둔다. 나중에 통계를 문장으로 말할 수 있게 된다.
+    var reason by remember(app.packageName) { mutableStateOf(LockReasonStore.reasonOf(context, app.packageName)) }
+    var showReasonEditor by remember(app.packageName) { mutableStateOf(false) }
+    val blockedScreenCount = remember(app.packageName) { ScreenBlockStore.blockedScreens(context).count { it.packageName == app.packageName } }
     val borderColor = when {
         isSelected -> NeonCyan
         app.isLocked -> NeonCyan.copy(alpha = 0.4f)
@@ -183,7 +194,86 @@ fun AppItemCard(
                 )
             }
 
-            // In normal mode: Test launch button + Lock switch
+            // 잠근 이유 메모 + 특정 화면 차단 수
+                if (app.isLocked) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (blockedScreenCount > 0) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = NeonRed.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "화면 ${blockedScreenCount}개",
+                                    color = NeonRed,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = NeonAmber.copy(alpha = 0.15f),
+                            modifier = Modifier.clickable { showReasonEditor = true }
+                        ) {
+                            Text(
+                                text = if (reason.isBlank()) "잠근 이유" else reason,
+                                color = if (reason.isBlank()) TextSecondary else NeonAmber,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
+                // 잠근 이유 편집 시트
+                if (showReasonEditor) {
+                    var draft by remember { mutableStateOf(reason) }
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showReasonEditor = false },
+                        containerColor = CyberSurfaceDark,
+                        title = { Text("${app.name} 을 잠근 이유", color = TextPrimary, fontSize = 16.sp) },
+                        text = {
+                            androidx.compose.material3.OutlinedTextField(
+                                value = draft,
+                                onValueChange = { draft = it },
+                                placeholder = { Text("예: 개인 사진이 있어서", color = TextSecondary, fontSize = 13.sp) },
+                                singleLine = true,
+                                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = CyberBorder,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                    cursorColor = NeonCyan
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                reason = draft.trim()
+                                LockReasonStore.setReason(context, app.packageName, draft.trim())
+                                showReasonEditor = false
+                            }) {
+                                Text("저장", color = NeonCyan, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            Row {
+                                androidx.compose.material3.TextButton(onClick = {
+                                    reason = ""
+                                    LockReasonStore.setReason(context, app.packageName, "")
+                                    showReasonEditor = false
+                                }) { Text("삭제", color = NeonRed, fontSize = 12.sp) }
+                                androidx.compose.material3.TextButton(onClick = { showReasonEditor = false }) {
+                                    Text("취소", color = TextSecondary)
+                                }
+                            }
+                        }
+                    )
+                }
+
+                // In normal mode: Test launch button + Lock switch
             if (!isSelectionMode) {
                 if (app.isLocked) {
                     IconButton(

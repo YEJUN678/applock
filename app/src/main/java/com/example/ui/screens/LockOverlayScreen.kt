@@ -15,6 +15,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
@@ -135,6 +136,9 @@ fun LockOverlayScreen(
     onDecoyUnlock: (() -> Unit)? = null,
     onFailedAttempt: ((Int) -> Unit)? = null,
     onDismiss: () -> Unit,
+    /** 잠그기 전에 보고 있던 화면. 있으면 "그 화면으로" 버튼을 보여 준다. */
+    resumePoint: com.example.ui.components.ResumeHint? = null,
+    onResumeToPoint: ((String, String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val accentColor = Color(lockAccent.hex)
@@ -389,6 +393,40 @@ fun LockOverlayScreen(
             if (emergencyContact.isNotBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text("비상 연락: $emergencyContact", color = TextSecondary, fontSize = 12.sp, textAlign = TextAlign.Center)
+            }
+
+            // 잠그기 전에 보고 있던 화면으로 바로 돌아가는 길.
+            // 잠금을 건너뛰는 길이 아니라 "해제하면 그 화면으로 간다" 안내다.
+            if (resumePoint != null && onResumeToPoint != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0x1A4D7CFF))
+                        .clickable {
+                            onResumeToPoint(resumePoint.className, resumePoint.title)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "방금 하던 화면으로",
+                            color = Color(lockAccent.hex),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = lockFontFamily
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            resumePoint.displayName,
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
 
             if (attemptCount > 0) {

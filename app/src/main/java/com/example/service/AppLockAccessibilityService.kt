@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityManager
 import com.example.LockActivity
 import com.example.util.AppLockPermissionHelper
 import com.example.util.AppLockPreferences
+import com.example.util.ResumePointStore
 import com.example.util.ScreenBlockStore
 
 class AppLockAccessibilityService : AccessibilityService() {
@@ -98,6 +99,13 @@ class AppLockAccessibilityService : AccessibilityService() {
             return
         }
 
+        // 잠금을 푼 뒤 본 화면을 기억한다. 나중에 잠금 화면에서 "방금 하던 화면으로"로 쓴다.
+        if (AppLockPreferences.isTemporarilyUnlocked(packageName) ||
+            AppLockPreferences.isScheduleLockActive(applicationContext)
+        ) {
+            rememberResumePoint(packageName, event)
+        }
+
         // 화면 기록은 모든 잠금 판정보다 먼저 한다.
         // 잠긴 앱은 아래에서 LockActivity 를 띄우고 return 하므로, 기록이 그 뒤에 있으면
         // 잠긴 앱(카톡 등)은 영원히 기록되지 않는다. 그래서 여기서 먼저 기록한다.
@@ -117,6 +125,9 @@ class AppLockAccessibilityService : AccessibilityService() {
 
                     if (AppLockPreferences.isPackageLocked(applicationContext, winPkg)) {
                         if (!AppLockPreferences.isTemporarilyUnlocked(winPkg)) {
+                            // 잠그기 전에 보고 있던 화면을 기억해 둔다.
+                            // 나중에 잠금 화면의 "방금 하던 화면으로" 로 돌아올 때 쓴다.
+                            rememberPointForLaterResume(winPkg)
                             LockActivity.start(applicationContext, winPkg)
                             return
                         }
@@ -251,6 +262,22 @@ class AppLockAccessibilityService : AccessibilityService() {
         ScreenBlockStore.record(applicationContext, packageName, appLabel, resolved, readWindowTitle())
     }
 
+    /**
+ * 잠금이 풀린 상태에서 본 화면을 복귀 지점으로 저장한다.
+ *
+ * 잠긴 상태에서 본 화면은 저장하지 않는다. 그때는 사용자가 인증하지 않은 상태라
+ * "방금 하던 화면"이 오히려 민감한 정보가 될 수 있다.
+ */
+    private fun rememberResumePoint(packageName: String, event: AccessibilityEvent) {
+        val className = event.className?.toString().orEmpty()
+        if (className.isBlank()) return
+        val appLabel = runCatching {
+            val pm = applicationContext.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+        }.getOrDefault(packageName)
+        ResumePointStore.save(applicationContext, packageName, appLabel, className, readWindowTitle())
+    }
+
     /** 막힌 화면 진입 시도를 잠금 화면에 전달한다(증거 기록용). */
     private fun recordScreenBlockAttempt(packageName: String, screenName: String) {
         val prefs = getSharedPreferences("screen_block_attempt", MODE_PRIVATE)
@@ -259,6 +286,23 @@ class AppLockAccessibilityService : AccessibilityService() {
             .putString("screen", screenName)
             .putLong("at", System.currentTimeMillis())
             .apply()
+    }
+
+    /**
+     * 잠금이 필요한 순간, 현재 보고 있던 화면을 복귀 지점으로 기억한다.
+     * 잠금 화면의 "방금 하던 화면으로" 버튼이 이 정보를 쓴다.
+     */
+    private fun rememberPointForLaterResume(packageName: String) {
+        runCatching {
+            val root = windows?.firstOrNull { it.root?.packageName?.toString() == packageName }?.root ?: return
+            val className = root.className?.toString().orEmpty()
+            if (className.isBlank()) return
+            val appLabel = runCatching {
+                val pm = applicationContext.packageManager
+                pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+            }.getOrDefault(packageName)
+            ResumePointStore.save(applicationContext, packageName, appLabel, className, readWindowTitle())
+        }
     }
 
     /**

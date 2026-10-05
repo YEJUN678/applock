@@ -52,6 +52,7 @@ fun StatsScreen(
     lockedAppCount: Int,
     totalAppCount: Int,
     onBack: () -> Unit,
+    lockReasons: List<Pair<String, String>> = emptyList(),
     onExportReport: (String?, Boolean) -> Unit = { _, _ -> }
 ) {
     val dayFormat = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
@@ -179,6 +180,34 @@ fun StatsScreen(
                             Spacer(Modifier.width(12.dp))
                             Text(name, color = TextPrimary, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
                             Text("${count}회", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 잠근 이유 통계: 숫자 나열이 아니라 문장으로 말한다.
+        if (lockReasons.isNotEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(OneUi.CardRadius))
+                        .background(OneUi.CardSurface)
+                        .padding(OneUi.CardPadding)
+                ) {
+                    Text("잠근 이유", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(10.dp))
+                    lockReasons.forEach { (appName, reason) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Box(Modifier.size(6.dp).background(OneUi.AccentTint, CircleShape))
+                            Spacer(Modifier.width(10.dp))
+                            Text(appName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Spacer(Modifier.width(8.dp))
+                            Text(reason, color = TextSecondary, fontSize = 12.sp, maxLines = 1, modifier = Modifier.weight(1f))
                         }
                     }
                 }

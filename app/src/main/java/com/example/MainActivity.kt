@@ -75,6 +75,7 @@ import com.example.util.AiSettings
 import com.example.util.GeminiClient
 import com.example.util.SessionReportRenderer
 import com.example.util.ScreenBlockStore
+import com.example.util.LockReasonStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -1213,6 +1214,13 @@ fun AppLockerApp(
                 screenBlockCount = ScreenBlockStore.blockedCount(context),
                 openScreenBlockManager = { (context as? MainActivity)?.openScreenBlockManager() },
                 onExportSessionReport = { withAi -> (context as? MainActivity)?.exportSessionReport(withAi) },
+                lockReasons = LockReasonStore.reasonsWithApps(context).map { (pkg, reason) ->
+                    val label = runCatching {
+                        val pm = context.packageManager
+                        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                    }.getOrDefault(pkg)
+                    label to reason
+                },
                 isFaceDownProtectionEnabled = faceDownProtectionEnabled,
                 onToggleFaceDownProtection = { enabled ->
                     AppLockPreferences.setFaceDownProtectionEnabled(context, enabled)

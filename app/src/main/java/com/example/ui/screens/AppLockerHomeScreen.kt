@@ -248,6 +248,7 @@ fun AppLockerHomeScreen(
     screenBlockCount: Int = 0,
     openScreenBlockManager: () -> Unit = {},
     onExportSessionReport: (Boolean) -> Unit = {},
+    lockReasons: List<Pair<String, String>> = emptyList(),
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -914,6 +915,7 @@ fun AppLockerHomeScreen(
                             lockedAppCount = lockedApps.size,
                             totalAppCount = apps.size,
                             onBack = { selectedTab = 1 },
+                            lockReasons = lockReasons,
                             onExportReport = { _, withAi -> onExportSessionReport(withAi) }
                         )
                     }

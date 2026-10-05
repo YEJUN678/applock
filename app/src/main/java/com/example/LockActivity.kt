@@ -50,6 +50,32 @@ class LockActivity : FragmentActivity() {
 
     companion object {
         const val EXTRA_PACKAGE_NAME = "extra_target_package_name"
+        const val EXTRA_RESUME_CLASS = "extra_resume_class"
+        const val EXTRA_RESUME_TITLE = "extra_resume_title"
+        const val EXTRA_RETURN_LOCKED = "extra_return_locked"
+
+        /**
+         * 잠금 해제 직후 복귀할 화면을 건네며 잠금 화면을 연다.
+         * 인증에 성공하면 그 화면으로 곧장 이동한다.
+         */
+        fun startWithResume(context: Context, packageName: String, className: String, title: String) {
+            val intent = Intent(context, LockActivity::class.java).apply {
+                putExtra(EXTRA_PACKAGE_NAME, packageName)
+                putExtra(EXTRA_RESUME_CLASS, className)
+                putExtra(EXTRA_RESUME_TITLE, title)
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION
+                )
+            }
+            try {
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                start(context, packageName)
+            }
+        }
 
         fun start(context: Context, packageName: String) {
             val intent = Intent(context, LockActivity::class.java).apply {
@@ -130,7 +156,29 @@ class LockActivity : FragmentActivity() {
             if (targetPackage != packageName) InstalledAppsManager.launchApp(this, targetPackage)
         }
         finish()
+
+        // "방금 하던 화면으로" 로 넘어온 경우, 인증이 끝난 뒤 그 화면으로 되돌아간다.
+        // 잠금을 먼저 확인하고 나서 이동해야 하므로 finish() 이후에 처리한다.
+        if (returnLockedAfterResume) {
+            val pkg = targetPackage
+            val cls = resumeClassName
+            if (pkg.isNotBlank() && cls.isNotBlank()) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    LockActivity.startWithResume(this, pkg, cls, resumeTitle)
+                    // 시간이 지나면 그 화면을 다시 잠근다(방치하면 무한정 열려 있을 수 있다).
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        AppLockPreferences.clearTemporarilyUnlocked(pkg)
+                    }, resumeLockDelayMs)
+                }, 600L)
+            }
+        }
     }
+
+    /** "방금 하던 화면으로" 로 넘어온 뒤 잠금을 다시 걸어야 하는가. */
+    private var returnLockedAfterResume: Boolean = false
+    private var resumeClassName: String = ""
+    private var resumeTitle: String = ""
+    private var resumeLockDelayMs: Long = 120_000L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -350,6 +398,14 @@ class LockActivity : FragmentActivity() {
                     onUnlockSuccess = {
                         completeUnlock()
                         Toast.makeText(this@LockActivity, "인증 성공!", Toast.LENGTH_SHORT).show()
+                    },
+                    resumePoint = com.example.util.ResumePointStore.latestValid(this@LockActivity)
+                        ?.takeIf { it.packageName == targetPackage }
+                        ?.let { com.example.ui.components.ResumeHint(it.displayName, it.className, it.title) },
+                    onResumeToPoint = { className, title ->
+                        // 잠금 해제 후 그 화면으로 곧장 돌아간다.
+                        AppLockPreferences.setTemporarilyUnlocked(targetPackage)
+                        startWithResume(this@LockActivity, targetPackage, className, title)
                     },
                     onCredentialVerified = { metrics ->
                         if (additionalCredentialRequired) {
