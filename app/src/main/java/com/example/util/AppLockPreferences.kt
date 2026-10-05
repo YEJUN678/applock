@@ -87,6 +87,7 @@ object AppLockPreferences {
     private const val KEY_PRIVACY_AUTO_PACKAGES = "privacy_auto_packages"
     private const val KEY_EXCLUDED_PACKAGES = "excluded_packages"
     private const val KEY_SESSION_LOG = "session_log"
+    private const val KEY_SESSION_RETENTION = "session_retention_days"
     private const val KEY_CLIPBOARD_LAST = "clipboard_last_copy"
     private const val KEY_CLIPBOARD_ENABLED = "clipboard_auto_clear"
     private const val KEY_CLIPBOARD_SECONDS = "clipboard_clear_seconds"
@@ -359,6 +360,35 @@ object AppLockPreferences {
 
     fun clearSessionLog(context: Context) {
         getPrefs(context).edit().remove(KEY_SESSION_LOG).apply()
+    }
+
+    /** 실행 기록 보관 기간(일). 0 이면 영구 보관. */
+    fun getSessionRetentionDays(context: Context): Int =
+        getPrefs(context).getInt(KEY_SESSION_RETENTION, 0)
+
+    fun setSessionRetentionDays(context: Context, days: Int) {
+        getPrefs(context).edit().putInt(KEY_SESSION_RETENTION, days.coerceAtLeast(0)).apply()
+    }
+
+    /** 보관 기간을 넘긴 실행 기록만 지운다(통계용 요약은 남는다). */
+    fun pruneSessionLog(context: Context, keepDays: Int) {
+        if (keepDays <= 0) {
+            clearSessionLog(context)
+            return
+        }
+        val cutoff = System.currentTimeMillis() - keepDays * 24L * 60L * 60L * 1000L
+        val kept = getSessionLog(context).filter { it.timestamp >= cutoff }
+        if (kept.size == getSessionLog(context).size) return
+        val array = JSONArray()
+        kept.reversed().forEach { session ->
+            array.put(JSONObject().apply {
+                put("package", session.packageName)
+                put("name", session.appName)
+                put("at", session.timestamp)
+                put("method", session.method)
+            })
+        }
+        getPrefs(context).edit().putString(KEY_SESSION_LOG, array.toString()).apply()
     }
 
     @Synchronized

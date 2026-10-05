@@ -100,7 +100,13 @@ data class SettingsUiState(
     val aiMaskedKey: String = "설정되지 않음",
     val aiModelName: String = "",
     val screenBlockAppCount: Int = 0,
-    val screenBlockCount: Int = 0
+    val screenBlockCount: Int = 0,
+    val auditScore: Int = 0,
+    val storageUsedText: String = "0 B",
+    val storageEvidenceText: String = "0 B",
+    val sessionRetentionDays: Int = 0,
+    val privacyShadeAutoApps: Int = 0,
+    val lockedWithReasonCount: Int = 0
 )
 
 /** 설정 화면에서 쓰는 색상 열거형 별칭(UI 층이 util 타입을 직접 다루지 않도록 한다). */
@@ -123,6 +129,11 @@ data class SettingsUiActions(
     val openAiKeyDialog: () -> Unit = {},
     val testAiKey: () -> Unit = {},
     val openScreenBlockManager: () -> Unit = {},
+    val openSafetyDiagnostic: () -> Unit = {},
+    val openStorageManager: () -> Unit = {},
+    val deleteEvidenceOlderThan: (Int) -> Unit = {},
+    val deleteAllEvidence: () -> Unit = {},
+    val changeSessionRetention: (Int) -> Unit = {},
     val toggleAppSelfProtect: (Boolean) -> Unit = {},
     val toggleUninstallProtection: (Boolean) -> Unit = {},
     val toggleScreenOffLock: (Boolean) -> Unit = {},
@@ -256,6 +267,7 @@ private data class SettingEntry(
 
 
 private val SEARCH_INDEX = listOf(
+    SettingEntry(SettingsSection.SECURITY, "안전 진단", "진단 점검 점수 확인 selfcheck", "실제로 통하는지 점검합니다"),
     SettingEntry(SettingsSection.SECURITY, "접근성 서비스", "권한 실시간 잠금 가로채기"),
     SettingEntry(SettingsSection.SECURITY, "다른 앱 위에 표시", "권한 overlay 잠금창"),
     SettingEntry(SettingsSection.SECURITY, "사용 정보 접근", "권한 앱 실행 감지"),
@@ -299,14 +311,17 @@ private val SEARCH_INDEX = listOf(
     SettingEntry(SettingsSection.VAULT, "암호화 백업", "백업 복원"),
     SettingEntry(SettingsSection.VAULT, "복구 QR", "오프라인 복구"),
     SettingEntry(SettingsSection.VAULT, "클립보드 자동 삭제", "개인정보 클립보드"),
+    SettingEntry(SettingsSection.VAULT, "사용 용량", "저장 공간 용량 정리", "앱이 차지하는 용량"),
+    SettingEntry(SettingsSection.VAULT, "오래된 증거 지우기", "자동삭제 오래된 파일", "오래된 증거 파일 정리"),
+    SettingEntry(SettingsSection.VAULT, "실행 기록 보관 기간", "보관 기간 자동 삭제", "실행 기록 자동 삭제"),
+    SettingEntry(SettingsSection.VAULT, "위장 아이콘", "계산기 메모 위장"),
+    SettingEntry(SettingsSection.VAULT, "가짜 오류 화면", "위장 crash"),
+    SettingEntry(SettingsSection.VAULT, "듀레스 · 미끼 PIN", "비상 핀 위장"),
+    SettingEntry(SettingsSection.VAULT, "침입 증거 촬영", "셀카 영상 음성"),
+    SettingEntry(SettingsSection.VAULT, "긴급 흔들기", "패닉 셰이크"),
+    SettingEntry(SettingsSection.VAULT, "업데이트 확인", "새 버전"),
     SettingEntry(SettingsSection.VAULT, "앱 실행 기록", "타임라인 기록"),
-    SettingEntry(SettingsSection.STEALTH, "위장 아이콘", "계산기 메모 위장"),
-    SettingEntry(SettingsSection.STEALTH, "가짜 오류 화면", "위장 crash"),
-    SettingEntry(SettingsSection.STEALTH, "듀레스 · 미끼 PIN", "비상 핀 위장"),
-    SettingEntry(SettingsSection.STEALTH, "AI 가드", "이상 행동 학습"),
-    SettingEntry(SettingsSection.STEALTH, "침입 증거 촬영", "셀카 영상 음성"),
-    SettingEntry(SettingsSection.STEALTH, "긴급 흔들기", "패닉 셰이크"),
-    SettingEntry(SettingsSection.STEALTH, "업데이트 확인", "새 버전")
+    SettingEntry(SettingsSection.STEALTH, "AI 가드", "이상 행동 학습")
 )
 
 @Composable

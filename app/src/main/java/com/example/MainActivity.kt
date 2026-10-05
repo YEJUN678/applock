@@ -73,6 +73,9 @@ import com.example.util.QrRecoveryManager
 import com.example.util.LostModeManager
 import com.example.util.AiSettings
 import com.example.util.GeminiClient
+import com.example.util.DataStorageManager
+import com.example.util.SecurityAudit
+import com.example.ui.screens.StorageManagerScreen
 import com.example.util.SessionReportRenderer
 import com.example.util.ScreenBlockStore
 import com.example.util.LockReasonStore
@@ -95,6 +98,16 @@ class MainActivity : FragmentActivity() {
 
     // "자세히 막기" 관리 화면을 띄울지 여부
     private var showScreenBlockManager by mutableStateOf(false)
+    private var showSafetyDiagnostic by mutableStateOf(false)
+    private var showStorageManager by mutableStateOf(false)
+
+    fun openSafetyDiagnostic() {
+        showSafetyDiagnostic = true
+    }
+
+    fun openStorageManager() {
+        showStorageManager = true
+    }
 
     /** 설정 화면에서 "자세히 막기"를 눌렀을 때 호출한다. */
     fun openScreenBlockManager() {
@@ -575,6 +588,26 @@ class MainActivity : FragmentActivity() {
                 if (showScreenBlockManager) {
                     com.example.ui.screens.settings.ScreenBlockManagerScreen(
                         onBack = { showScreenBlockManager = false }
+                    )
+                }
+                if (showSafetyDiagnostic) {
+                    com.example.ui.screens.SafetyDiagnosticScreen(
+                        onBack = { showSafetyDiagnostic = false }
+                    )
+                }
+                if (showStorageManager) {
+                    StorageManagerScreen(
+                        onBack = { showStorageManager = false },
+                        onPrune = { days ->
+                            val deleted = DataStorageManager.deleteEvidenceOlderThan(this@MainActivity, days)
+                            Toast.makeText(this@MainActivity, "증거 ${deleted}개를 지웠습니다.", Toast.LENGTH_SHORT).show()
+                            showStorageManager = false
+                        },
+                        onDeleteAll = {
+                            val deleted = DataStorageManager.deleteAllEvidenceFiles(this@MainActivity)
+                            Toast.makeText(this@MainActivity, "증거 파일 ${deleted}개를 지웠습니다.", Toast.LENGTH_SHORT).show()
+                            showStorageManager = false
+                        }
                     )
                 }
             }
@@ -1213,6 +1246,29 @@ fun AppLockerApp(
                 screenBlockAppCount = ScreenBlockStore.appsWithScreens(context).size,
                 screenBlockCount = ScreenBlockStore.blockedCount(context),
                 openScreenBlockManager = { (context as? MainActivity)?.openScreenBlockManager() },
+                auditScore = SecurityAudit.scoreOf(SecurityAudit.run(context)),
+                storageUsedText = DataStorageManager.formatSize(DataStorageManager.usage(context).total),
+                storageEvidenceText = DataStorageManager.formatSize(
+                    DataStorageManager.usage(context).let { it.intruderPhotos + it.intruderVideos + it.aiGuardAudio }
+                ),
+                sessionRetentionDays = AppLockPreferences.getSessionRetentionDays(context),
+                privacyShadeAutoApps = 0,
+                lockedWithReasonCount = LockReasonStore.reasonsWithApps(context).size,
+                openSafetyDiagnostic = { (context as? MainActivity)?.openSafetyDiagnostic() },
+                openStorageManager = { (context as? MainActivity)?.openStorageManager() },
+                deleteEvidenceOlderThan = { days ->
+                    val deleted = DataStorageManager.deleteEvidenceOlderThan(context, days)
+                    onShowToast("증거 ${deleted}개를 지웠습니다.")
+                },
+                deleteAllEvidence = {
+                    val deleted = DataStorageManager.deleteAllEvidenceFiles(context)
+                    onShowToast("증거 파일 ${deleted}개를 지웠습니다.")
+                },
+                changeSessionRetention = { days ->
+                    AppLockPreferences.setSessionRetentionDays(context, days)
+                    val pruned = DataStorageManager.pruneSessions(context, days)
+                    onShowToast(if (pruned > 0) "오래된 기록 ${pruned}건을 지웠습니다." else "보관 기간을 ${days}일로 설정했습니다.")
+                },
                 onExportSessionReport = { withAi -> (context as? MainActivity)?.exportSessionReport(withAi) },
                 lockReasons = LockReasonStore.reasonsWithApps(context).map { (pkg, reason) ->
                     val label = runCatching {

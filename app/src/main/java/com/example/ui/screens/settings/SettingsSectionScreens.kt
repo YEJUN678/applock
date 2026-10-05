@@ -12,6 +12,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.AutoDelete
+import androidx.compose.material.icons.filled.HistoryToggleOff
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoAwesomeMotion
@@ -52,6 +61,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Icon
 import com.example.model.AiGuardFallback
 import com.example.model.LockType
@@ -64,11 +76,30 @@ import com.example.ui.components.settings.SettingsSectionLabel
 import com.example.ui.components.settings.SettingsStatusBanner
 import com.example.ui.components.settings.SettingsToggleRow
 import com.example.ui.theme.OneUi
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 
 /** 보안 · 권한 */
 @Composable
 fun SecuritySectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBack: () -> Unit) {
     SectionScaffold(SettingsSection.SECURITY, onBack) {
+        item { SettingsSectionLabel("진단") }
+        item {
+            SettingsCard(accent = OneUi.CardSurface) {
+                SettingsRow(
+                    icon = Icons.Default.HealthAndSafety,
+                    title = "안전 진단",
+                    subtitle = if (state.auditScore >= 90) {
+                        "$state.auditScore점 · 모두 정상입니다"
+                    } else {
+                        "$state.auditScore점 · 확인이 필요한 항목이 있습니다"
+                    },
+                    tint = if (state.auditScore >= 90) OneUi.OkTint else OneUi.WarnTint,
+                    showChevron = true,
+                    onClick = actions.openSafetyDiagnostic
+                )
+            }
+        }
         if (!state.hasAccessibilityPermission || !state.hasOverlayPermission) {
             item {
                 SettingsStatusBanner(
@@ -602,6 +633,9 @@ fun AppearanceSectionScreen(state: SettingsUiState, actions: SettingsUiActions, 
 @Composable
 fun VaultSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBack: () -> Unit) {
     var clipboardSheet by remember { mutableStateOf(false) }
+    var pruneSheet by remember { mutableStateOf(false) }
+    var retentionSheet by remember { mutableStateOf(false) }
+    var confirmDeleteEvidence by remember { mutableStateOf(false) }
     SectionScaffold(SettingsSection.VAULT, onBack) {
         item { SettingsSectionLabel("자세히 막기") }
         item {
@@ -747,6 +781,59 @@ fun VaultSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBac
                 )
             }
         }
+
+        item { SettingsSectionLabel("저장 공간") }
+        item {
+            SettingsCard(accent = OneUi.CardSurface) {
+                SettingsRow(
+                    icon = Icons.Default.Storage,
+                    title = "사용 용량",
+                    subtitle = "전체 ${state.storageUsedText} (증거 ${state.storageEvidenceText})",
+                    tint = OneUi.InfoTint,
+                    showChevron = true,
+                    onClick = actions.openStorageManager
+                )
+                SettingsRow(
+                    icon = Icons.Default.AutoDelete,
+                    title = "오래된 증거 지우기",
+                    subtitle = "파일만 지우고 기록은 남깁니다",
+                    tint = OneUi.WarnTint,
+                    showChevron = true,
+                    onClick = { pruneSheet = true }
+                )
+                SettingsRow(
+                    icon = Icons.Default.DeleteForever,
+                    title = "증거 파일 모두 지우기",
+                    subtitle = "파일만 지우고 기록은 남깁니다",
+                    tint = OneUi.DangerTint,
+                    showChevron = true,
+                    onClick = { confirmDeleteEvidence = true }
+                )
+                SettingsRow(
+                    icon = Icons.Default.HistoryToggleOff,
+                    title = "실행 기록 보관 기간",
+                    subtitle = if (state.sessionRetentionDays <= 0) "영구 보관" else "${state.sessionRetentionDays}일",
+                    tint = OneUi.WarnTint,
+                    value = if (state.sessionRetentionDays <= 0) "영구" else "${state.sessionRetentionDays}일",
+                    showChevron = true,
+                    onClick = { retentionSheet = true }
+                )
+            }
+        }
+
+        item { SettingsSectionLabel("위장") }
+        item {
+            SettingsCard(accent = OneUi.CardSurface) {
+                SettingsRow(
+                    icon = Icons.Default.SmartToy,
+                    title = "위장 아이콘",
+                    subtitle = "홈 화면에서 계산기 · 메모장으로 보입니다",
+                    tint = OneUi.WarnTint,
+                    showChevron = true,
+                    onClick = actions.configureDisguise
+                )
+            }
+        }
     }
 
     if (clipboardSheet) {
@@ -756,6 +843,60 @@ fun VaultSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBac
             selectedIndex = listOf(30, 60, 180, 300).indexOf(state.clipboardClearSeconds).coerceAtLeast(0),
             onSelect = { actions.changeClipboardSeconds(it); clipboardSheet = false },
             onDismiss = { clipboardSheet = false }
+        )
+    }
+
+    if (pruneSheet) {
+        SettingsChoiceSheet(
+            title = "얼마 지난 증거를 지울까요?",
+            options = listOf(
+                7 to "7일 지난 것",
+                30 to "30일 지난 것",
+                90 to "90일 지난 것"
+            ),
+            selectedIndex = -1,
+            onSelect = {
+                actions.deleteEvidenceOlderThan(it)
+                pruneSheet = false
+            },
+            onDismiss = { pruneSheet = false }
+        )
+    }
+
+    if (retentionSheet) {
+        SettingsChoiceSheet(
+            title = "실행 기록 보관 기간",
+            options = listOf(0 to "영구", 7 to "7일", 30 to "30일", 90 to "90일"),
+            selectedIndex = listOf(0, 7, 30, 90).indexOf(state.sessionRetentionDays).coerceAtLeast(0),
+            onSelect = { actions.changeSessionRetention(it); retentionSheet = false },
+            onDismiss = { retentionSheet = false }
+        )
+    }
+
+    if (confirmDeleteEvidence) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmDeleteEvidence = false },
+            containerColor = com.example.ui.theme.CyberSurfaceDark,
+            title = { Text("증거 파일을 모두 지울까요?", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "사진 · 영상 · 음성 파일이 삭제됩니다.\n시도 횟수와 시각 기록은 남습니다.",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    actions.deleteAllEvidence()
+                    confirmDeleteEvidence = false
+                }) { Text("삭제", color = OneUi.DangerTint, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmDeleteEvidence = false }) {
+                    Text("취소", color = TextSecondary)
+                }
+            }
         )
     }
 }

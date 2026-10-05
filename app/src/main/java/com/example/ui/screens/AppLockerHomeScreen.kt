@@ -249,6 +249,17 @@ fun AppLockerHomeScreen(
     openScreenBlockManager: () -> Unit = {},
     onExportSessionReport: (Boolean) -> Unit = {},
     lockReasons: List<Pair<String, String>> = emptyList(),
+    auditScore: Int = 0,
+    storageUsedText: String = "0 B",
+    storageEvidenceText: String = "0 B",
+    sessionRetentionDays: Int = 0,
+    privacyShadeAutoApps: Int = 0,
+    lockedWithReasonCount: Int = 0,
+    openSafetyDiagnostic: () -> Unit = {},
+    openStorageManager: () -> Unit = {},
+    deleteEvidenceOlderThan: (Int) -> Unit = {},
+    deleteAllEvidence: () -> Unit = {},
+    changeSessionRetention: (Int) -> Unit = {},
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -1036,6 +1047,17 @@ fun AppLockerHomeScreen(
                             screenBlockAppCount = screenBlockAppCount,
                             screenBlockCount = screenBlockCount,
                             openScreenBlockManager = openScreenBlockManager,
+                            auditScore = auditScore,
+                            storageUsedText = storageUsedText,
+                            storageEvidenceText = storageEvidenceText,
+                            sessionRetentionDays = sessionRetentionDays,
+                            privacyShadeAutoApps = privacyShadeAutoApps,
+                            lockedWithReasonCount = lockedWithReasonCount,
+                            openSafetyDiagnostic = openSafetyDiagnostic,
+                            openStorageManager = openStorageManager,
+                            deleteEvidenceOlderThan = deleteEvidenceOlderThan,
+                            deleteAllEvidence = deleteAllEvidence,
+                            changeSessionRetention = changeSessionRetention,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
@@ -1261,7 +1283,18 @@ fun SettingsView(
     onTestAiKey: () -> Unit = {},
     screenBlockAppCount: Int = 0,
     screenBlockCount: Int = 0,
-    openScreenBlockManager: () -> Unit = {}
+    openScreenBlockManager: () -> Unit = {},
+    auditScore: Int = 0,
+    storageUsedText: String = "0 B",
+    storageEvidenceText: String = "0 B",
+    sessionRetentionDays: Int = 0,
+    privacyShadeAutoApps: Int = 0,
+    lockedWithReasonCount: Int = 0,
+    openSafetyDiagnostic: () -> Unit = {},
+    openStorageManager: () -> Unit = {},
+    deleteEvidenceOlderThan: (Int) -> Unit = {},
+    deleteAllEvidence: () -> Unit = {},
+    changeSessionRetention: (Int) -> Unit = {}
 ) {
     val state = SettingsUiState(
         lockConfig = lockConfig,
@@ -1289,7 +1322,13 @@ fun SettingsView(
         aiMaskedKey = aiKeyLabel,
         aiModelName = aiModel,
         screenBlockAppCount = screenBlockAppCount,
-        screenBlockCount = screenBlockCount
+        screenBlockCount = screenBlockCount,
+        auditScore = auditScore,
+        storageUsedText = storageUsedText,
+        storageEvidenceText = storageEvidenceText,
+        sessionRetentionDays = sessionRetentionDays,
+        privacyShadeAutoApps = privacyShadeAutoApps,
+        lockedWithReasonCount = lockedWithReasonCount
     )
 
     val actions = SettingsUiActions(
@@ -1308,6 +1347,11 @@ fun SettingsView(
         openAiKeyDialog = onOpenAiKeyDialog,
         testAiKey = onTestAiKey,
         openScreenBlockManager = openScreenBlockManager,
+        openSafetyDiagnostic = openSafetyDiagnostic,
+        openStorageManager = openStorageManager,
+        deleteEvidenceOlderThan = deleteEvidenceOlderThan,
+        deleteAllEvidence = deleteAllEvidence,
+        changeSessionRetention = changeSessionRetention,
         toggleAppSelfProtect = onToggleAppSelfProtect,
         toggleUninstallProtection = onToggleUninstallProtection,
         toggleScreenOffLock = onToggleScreenOffLock,
