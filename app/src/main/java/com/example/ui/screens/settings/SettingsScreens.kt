@@ -93,7 +93,10 @@ data class SettingsUiState(
     val notificationHighlightEnabled: Boolean = false,
     val notificationHighlightStyle: NotificationHighlighter.Style = NotificationHighlighter.Style.BLUE_VIOLET,
     val aiSummaryEnabled: Boolean = false,
-    val aiKeyConfigured: Boolean = false
+    val aiKeyConfigured: Boolean = false,
+    val lockBackgroundGallery: List<String> = emptyList(),
+    val lockBackgroundAutoRotate: Boolean = false,
+    val lockBackgroundRotateSeconds: Int = 30
 )
 
 /** 설정 화면에서 쓰는 색상 열거형 별칭(UI 층이 util 타입을 직접 다루지 않도록 한다). */
@@ -109,6 +112,10 @@ data class SettingsUiActions(
     val toggleNotificationHighlight: (Boolean) -> Unit = {},
     val cycleHighlightStyle: () -> Unit = {},
     val toggleAiSummary: (Boolean) -> Unit = {},
+    val addBackgroundToGallery: () -> Unit = {},
+    val removeBackground: (String) -> Unit = {},
+    val toggleBackgroundAutoRotate: (Boolean) -> Unit = {},
+    val cycleBackgroundRotateSeconds: () -> Unit = {},
     val toggleAppSelfProtect: (Boolean) -> Unit = {},
     val toggleUninstallProtection: (Boolean) -> Unit = {},
     val toggleScreenOffLock: (Boolean) -> Unit = {},
@@ -225,7 +232,15 @@ internal fun SectionScaffold(
 }
 
 /** 검색 인덱스: 설정 항목 검색 시 어느 섹션으로 안내할지 알려준다. */
-private data class SettingEntry(val section: SettingsSection, val label: String, val keywords: String)
+private data class SettingEntry(
+    val section: SettingsSection,
+    val label: String,
+    val keywords: String,
+    /** 왜 이 항목이 걸렸는지 보여줄 설명. 없으면 구획 이름만 보여준다. */
+    val reason: String = ""
+)
+
+
 
 private val SEARCH_INDEX = listOf(
     SettingEntry(SettingsSection.SECURITY, "접근성 서비스", "권한 실시간 잠금 가로채기"),
@@ -258,7 +273,9 @@ private val SEARCH_INDEX = listOf(
     SettingEntry(SettingsSection.LOCK, "복구 질문", "비밀번호 분실 복구"),
     SettingEntry(SettingsSection.LOCK, "12자리 복구키", "복구키"),
     SettingEntry(SettingsSection.APPEARANCE, "잠금 화면 편집기", "스타일 꾸미기 프리셋 one ui"),
-    SettingEntry(SettingsSection.APPEARANCE, "배경 테마", "배경 사진"),
+    SettingEntry(SettingsSection.APPEARANCE, "배경 테마", "배경 사진", "색상 그라디언트 프리셋"),
+    SettingEntry(SettingsSection.APPEARANCE, "배경 여러 장 등록", "배경 사진 갤러리 여러 장 슬라이드쇼", "갤러리 사진 여러 장 자동 전환"),
+    SettingEntry(SettingsSection.APPEARANCE, "배경 자동 전환", "배경 슬라이드쇼 전환 시간 라이브 배경", "자동 전환 간격 초"),
     SettingEntry(SettingsSection.APPEARANCE, "사생활 보호 화면", "프라이버시 필터 가림막"),
     SettingEntry(SettingsSection.APPEARANCE, "비상 연락처", "잠금 화면 연락처"),
     SettingEntry(SettingsSection.VAULT, "파일 금고", "암호화 보관함"),
@@ -354,9 +371,10 @@ private fun SettingsHubScreen(
                             SettingsRow(
                                 icon = null,
                                 title = entry.label,
-                                subtitle = entry.section.title,
+                                subtitle = entry.reason.ifBlank { entry.section.title },
                                 tint = OneUi.AccentTint,
                                 showChevron = true,
+                                highlightQuery = query,
                                 onClick = {
                                     query = ""
                                     onOpenSection(entry.section)

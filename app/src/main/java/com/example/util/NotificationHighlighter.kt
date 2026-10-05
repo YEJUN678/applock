@@ -59,7 +59,8 @@ object NotificationHighlighter {
         context: Context,
         sbn: StatusBarNotification,
         style: Style,
-        summaryProvider: ((String, String) -> String?)? = null
+        summaryProvider: ((String, String) -> String?)? = null,
+        onCancelOriginal: (() -> Unit)? = null
     ) {
         val notification = sbn.notification
         val appLabel = appLabel(context, sbn.packageName)
@@ -89,7 +90,9 @@ object NotificationHighlighter {
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .build()
 
+        // 교체를 먼저 올린다. 원본을 먼저 지우면 알림이 사라졌다가 다시 떠서 깜빡인다.
         NotificationManagerCompat.from(context).notify(id, built)
+        onCancelOriginal?.invoke()
 
         // AI 요약은 네트워크가 필요하므로 알림을 띄운 뒤에 갱신한다.
         val prompt = "$appLabel 알림\n제목: ${title.ifBlank { "(없음)" }}\n내용: ${text.ifBlank { "(없음)" }}"
@@ -116,6 +119,7 @@ object NotificationHighlighter {
             )
         }.start()
     }
+
 
     private fun appLabel(context: Context, packageName: String): String = runCatching {
         val manager = context.getPackageManager()

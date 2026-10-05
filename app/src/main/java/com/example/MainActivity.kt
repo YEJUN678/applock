@@ -192,6 +192,54 @@ class MainActivity : FragmentActivity() {
             recreate()
         }
     }
+    /** 잠금 배경 갤러리에 사진 한 장을 추가한다(여러 장 등록 → 자동 전환). */
+    private val pickLockBackgroundForGallery = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            val current = AppLockPreferences.getLockConfig(this)
+            // 같은 사진은 중복 등록하지 않는다.
+            if (current.lockBackgroundUris.contains(uri.toString())) {
+                Toast.makeText(this, "이미 등록된 사진입니다.", Toast.LENGTH_SHORT).show()
+                return@registerForActivityResult
+            }
+            AppLockPreferences.saveLockConfig(
+                this,
+                current.copy(lockBackgroundUris = current.lockBackgroundUris + uri.toString())
+            )
+            Toast.makeText(this, "배경에 추가했습니다 (총 ${current.lockBackgroundUris.size + 1}장).", Toast.LENGTH_SHORT).show()
+        }
+    }
+    fun addLockBackgroundToGallery() {
+        pickLockBackgroundForGallery.launch(arrayOf("image/*"))
+    }
+    fun removeLockBackground(uri: String) {
+        val current = AppLockPreferences.getLockConfig(this)
+        val remaining = current.lockBackgroundUris.filterNot { it == uri }
+        // 한 장도 안 남으면 자동 전환은 의미가 없으므로 같이 끈다.
+        AppLockPreferences.saveLockConfig(
+            this,
+            current.copy(
+                lockBackgroundUris = remaining,
+                lockBackgroundAutoRotate = if (remaining.size <= 1) false else current.lockBackgroundAutoRotate
+            )
+        )
+    }
+    fun setLockBackgroundAutoRotate(enabled: Boolean) {
+        val current = AppLockPreferences.getLockConfig(this)
+        if (enabled && current.lockBackgroundUris.size <= 1) {
+            Toast.makeText(this, "자동 전환하려면 배경을 2장 이상 등록해 주세요.", Toast.LENGTH_LONG).show()
+            return
+        }
+        AppLockPreferences.saveLockConfig(this, current.copy(lockBackgroundAutoRotate = enabled))
+    }
+    fun cycleLockBackgroundRotateSeconds() {
+        val current = AppLockPreferences.getLockConfig(this)
+        val options = listOf(10, 30, 60, 180, 600)
+        val next = options[(options.indexOfFirst { it >= current.lockBackgroundRotateSeconds }.takeIf { it >= 0 }
+            ?: (options.indexOf(current.lockBackgroundRotateSeconds) + 1).coerceAtMost(options.lastIndex)) + 1]
+            .coerceAtMost(options.lastIndex)
+        AppLockPreferences.saveLockConfig(this, current.copy(lockBackgroundRotateSeconds = next))
+    }
     fun chooseCustomLockBackground() {
         pickLockBackground.launch(arrayOf("image/*"))
     }
@@ -1006,6 +1054,10 @@ fun AppLockerApp(
                 onToggleNotificationHighlight = { enabled -> (context as? MainActivity)?.setNotificationHighlight(enabled) },
                 onCycleHighlightStyle = { (context as? MainActivity)?.cycleNotificationHighlightStyle() },
                 onToggleAiSummary = { enabled -> (context as? MainActivity)?.setAiSummary(enabled) },
+                onAddBackgroundToGallery = { (context as? MainActivity)?.addLockBackgroundToGallery() },
+                onRemoveBackground = { uri -> (context as? MainActivity)?.removeLockBackground(uri) },
+                onToggleBackgroundAutoRotate = { enabled -> (context as? MainActivity)?.setLockBackgroundAutoRotate(enabled) },
+                onCycleBackgroundRotateSeconds = { (context as? MainActivity)?.cycleLockBackgroundRotateSeconds() },
                 isFaceDownProtectionEnabled = faceDownProtectionEnabled,
                 onToggleFaceDownProtection = { enabled ->
                     AppLockPreferences.setFaceDownProtectionEnabled(context, enabled)

@@ -37,6 +37,9 @@ object AppLockPreferences {
     private const val KEY_BIOMETRIC = "biometric_enabled"
     private const val KEY_THEME = "background_theme"
     private const val KEY_CUSTOM_LOCK_BACKGROUND_URI = "custom_lock_background_uri"
+    private const val KEY_LOCK_BACKGROUND_URIS = "lock_background_uris"
+    private const val KEY_LOCK_BG_AUTO_ROTATE = "lock_background_auto_rotate"
+    private const val KEY_LOCK_BG_ROTATE_SECONDS = "lock_background_rotate_seconds"
     private const val KEY_LOCK_MESSAGE = "lock_screen_message"
     private const val KEY_LOCK_ICON_SCALE = "lock_icon_scale"
     private const val KEY_LOCK_DIM = "lock_background_dim"
@@ -536,6 +539,9 @@ object AppLockPreferences {
             BackgroundTheme.CYBER_WALLPAPER
         }
         val customBackgroundUri = prefs.getString(KEY_CUSTOM_LOCK_BACKGROUND_URI, null)
+        val backgroundUris = prefs.getStringSet(KEY_LOCK_BACKGROUND_URIS, emptySet()).orEmpty().toList()
+        val bgAutoRotate = prefs.getBoolean(KEY_LOCK_BG_AUTO_ROTATE, false)
+        val bgRotateSeconds = prefs.getInt(KEY_LOCK_BG_ROTATE_SECONDS, 30).coerceIn(5, 600)
         val lockMessage = prefs.getString(KEY_LOCK_MESSAGE, "") ?: ""
         val iconScale = prefs.getFloat(KEY_LOCK_ICON_SCALE, 1f).coerceIn(0.75f, 1.35f)
         val dim = prefs.getFloat(KEY_LOCK_DIM, 0.82f).coerceIn(0.45f, 0.95f)
@@ -586,6 +592,9 @@ object AppLockPreferences {
             biometricEnabled = biometric,
             backgroundTheme = theme,
             customLockBackgroundUri = customBackgroundUri,
+            lockBackgroundUris = backgroundUris,
+            lockBackgroundAutoRotate = bgAutoRotate,
+            lockBackgroundRotateSeconds = bgRotateSeconds,
             lockScreenMessage = lockMessage,
             lockIconScale = iconScale,
             lockBackgroundDim = dim,
@@ -641,6 +650,9 @@ object AppLockPreferences {
             .putBoolean(KEY_BIOMETRIC, config.biometricEnabled)
             .putString(KEY_THEME, config.backgroundTheme.name)
             .putString(KEY_CUSTOM_LOCK_BACKGROUND_URI, config.customLockBackgroundUri)
+            .putStringSet(KEY_LOCK_BACKGROUND_URIS, config.lockBackgroundUris.toSet())
+            .putBoolean(KEY_LOCK_BG_AUTO_ROTATE, config.lockBackgroundAutoRotate)
+            .putInt(KEY_LOCK_BG_ROTATE_SECONDS, config.lockBackgroundRotateSeconds.coerceIn(5, 600))
             .putString(KEY_LOCK_MESSAGE, config.lockScreenMessage)
             .putFloat(KEY_LOCK_ICON_SCALE, config.lockIconScale)
             .putFloat(KEY_LOCK_DIM, config.lockBackgroundDim)

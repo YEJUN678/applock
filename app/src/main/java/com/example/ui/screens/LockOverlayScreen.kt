@@ -100,6 +100,9 @@ fun LockOverlayScreen(
     targetKnockCode: List<Int> = listOf(1, 2, 3, 4),
     backgroundTheme: BackgroundTheme,
     customBackgroundUri: String? = null,
+    backgroundGalleryUris: List<String> = emptyList(),
+    backgroundAutoRotate: Boolean = false,
+    backgroundRotateSeconds: Int = 30,
     emergencyContact: String = "",
     lockMessage: String = "",
     lockIconScale: Float = 1f,
@@ -221,7 +224,16 @@ fun LockOverlayScreen(
     }
 
 
-    AppLockBackground(theme = backgroundTheme, customImageUri = customBackgroundUri, dimAmount = lockBackgroundDim, blurAmount = lockBackgroundBlur, modifier = modifier) {
+    AppLockBackground(
+        theme = backgroundTheme,
+        customImageUri = customBackgroundUri,
+        galleryUris = backgroundGalleryUris,
+        autoRotate = backgroundAutoRotate,
+        rotateSeconds = backgroundRotateSeconds,
+        dimAmount = lockBackgroundDim,
+        blurAmount = lockBackgroundBlur,
+        modifier = modifier
+    ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier

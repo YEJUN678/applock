@@ -236,6 +236,10 @@ fun AppLockerHomeScreen(
     onToggleNotificationHighlight: (Boolean) -> Unit = {},
     onCycleHighlightStyle: () -> Unit = {},
     onToggleAiSummary: (Boolean) -> Unit = {},
+    onAddBackgroundToGallery: () -> Unit = {},
+    onRemoveBackground: (String) -> Unit = {},
+    onToggleBackgroundAutoRotate: (Boolean) -> Unit = {},
+    onCycleBackgroundRotateSeconds: () -> Unit = {},
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -1007,6 +1011,10 @@ fun AppLockerHomeScreen(
                             onToggleNotificationHighlight = onToggleNotificationHighlight,
                             onCycleHighlightStyle = onCycleHighlightStyle,
                             onToggleAiSummary = onToggleAiSummary,
+                            onAddBackgroundToGallery = onAddBackgroundToGallery,
+                            onRemoveBackground = onRemoveBackground,
+                            onToggleBackgroundAutoRotate = onToggleBackgroundAutoRotate,
+                            onCycleBackgroundRotateSeconds = onCycleBackgroundRotateSeconds,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
@@ -1221,7 +1229,11 @@ fun SettingsView(
     aiKeyConfigured: Boolean = false,
     onToggleNotificationHighlight: (Boolean) -> Unit = {},
     onCycleHighlightStyle: () -> Unit = {},
-    onToggleAiSummary: (Boolean) -> Unit = {}
+    onToggleAiSummary: (Boolean) -> Unit = {},
+    onAddBackgroundToGallery: () -> Unit = {},
+    onRemoveBackground: (String) -> Unit = {},
+    onToggleBackgroundAutoRotate: (Boolean) -> Unit = {},
+    onCycleBackgroundRotateSeconds: () -> Unit = {}
 ) {
     val state = SettingsUiState(
         lockConfig = lockConfig,
@@ -1242,7 +1254,10 @@ fun SettingsView(
         notificationHighlightEnabled = notificationHighlightEnabled,
         notificationHighlightStyle = notificationHighlightStyle,
         aiSummaryEnabled = aiSummaryEnabled,
-        aiKeyConfigured = aiKeyConfigured
+        aiKeyConfigured = aiKeyConfigured,
+        lockBackgroundGallery = lockConfig.lockBackgroundUris,
+        lockBackgroundAutoRotate = lockConfig.lockBackgroundAutoRotate,
+        lockBackgroundRotateSeconds = lockConfig.lockBackgroundRotateSeconds
     )
 
     val actions = SettingsUiActions(
@@ -1254,6 +1269,10 @@ fun SettingsView(
         toggleNotificationHighlight = onToggleNotificationHighlight,
         cycleHighlightStyle = onCycleHighlightStyle,
         toggleAiSummary = onToggleAiSummary,
+        addBackgroundToGallery = onAddBackgroundToGallery,
+        removeBackground = onRemoveBackground,
+        toggleBackgroundAutoRotate = onToggleBackgroundAutoRotate,
+        cycleBackgroundRotateSeconds = onCycleBackgroundRotateSeconds,
         toggleAppSelfProtect = onToggleAppSelfProtect,
         toggleUninstallProtection = onToggleUninstallProtection,
         toggleScreenOffLock = onToggleScreenOffLock,

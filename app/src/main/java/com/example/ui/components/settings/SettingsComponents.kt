@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -106,6 +107,31 @@ fun SettingsRowGroup(modifier: Modifier = Modifier, content: @Composable ColumnS
     )
 }
 
+/**
+ * 검색어와 일치한 구간만 강조해 준다.
+ * "이거 내가 찾는 거 맞아?" 하는 순간을 없애려고 넣었다.
+ */
+private fun buildHighlightedText(text: String, query: String, enabled: Boolean) =
+    androidx.compose.ui.text.buildAnnotatedString {
+        val needle = query.trim()
+        val start = if (needle.isEmpty()) -1 else text.indexOf(needle, ignoreCase = true)
+        if (start < 0) {
+            append(text)
+            return@buildAnnotatedString
+        }
+        append(text.substring(0, start))
+        withStyle(
+            androidx.compose.ui.text.SpanStyle(
+                color = OneUi.AccentTint,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                background = if (enabled) OneUi.tintAlpha(OneUi.AccentTint) else androidx.compose.ui.graphics.Color.Transparent
+            )
+        ) {
+            append(text.substring(start, start + needle.length))
+        }
+        append(text.substring(start + needle.length))
+    }
+
 /** 왼쪽 아이콘 타일 + 가운데 텍스트 + 오른쪽 콘텐츠. */
 @Composable
 fun SettingsRow(
@@ -117,6 +143,8 @@ fun SettingsRow(
     showChevron: Boolean = false,
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
+    /** 검색 결과에서만 쓴다. 검색어와 일치한 부분을 색으로 강조해 준다. */
+    highlightQuery: String = "",
     trailing: @Composable (() -> Unit)? = null
 ) {
     val clickModifier = if (onClick != null && enabled) {
@@ -139,12 +167,21 @@ fun SettingsRow(
             Spacer(Modifier.width(14.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                color = if (enabled) TextPrimary else TextSecondary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            if (highlightQuery.isBlank()) {
+                Text(
+                    title,
+                    color = if (enabled) TextPrimary else TextSecondary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            } else {
+                Text(
+                    text = buildHighlightedText(title, highlightQuery, enabled),
+                    color = if (enabled) TextPrimary else TextSecondary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
             if (!subtitle.isNullOrBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(subtitle, color = TextSecondary, fontSize = 12.sp)

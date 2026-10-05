@@ -3,10 +3,19 @@ package com.example.ui.screens.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.AutoAwesomeMotion
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CloudUpload
@@ -35,8 +44,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.Icon
 import com.example.model.AiGuardFallback
 import com.example.model.LockType
 import com.example.util.NotificationHighlighter
@@ -453,6 +468,7 @@ private enum class LockSheet { TYPE, TIMEOUT, FAILED, LOCKOUT, SCHEDULE }
 
 /** 화면 꾸미기 */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun AppearanceSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBack: () -> Unit) {
     val config = state.lockConfig
     SectionScaffold(SettingsSection.APPEARANCE, onBack) {
@@ -485,6 +501,76 @@ fun AppearanceSectionScreen(state: SettingsUiState, actions: SettingsUiActions, 
                     showChevron = true,
                     onClick = actions.pickCustomLockBackground
                 )
+                SettingsRow(
+                    icon = Icons.Default.AddPhotoAlternate,
+                    title = "배경 여러 장 등록",
+                    subtitle = if (state.lockBackgroundGallery.isEmpty()) {
+                        "사진을 2장 이상 넣으면 자동 전환할 수 있습니다"
+                    } else {
+                        "등록 ${state.lockBackgroundGallery.size}장"
+                    },
+                    tint = OneUi.AccentTint,
+                    showChevron = true,
+                    onClick = actions.addBackgroundToGallery
+                )
+                // 등록된 사진을 칩 형태로 보여 주고 누르면 지워진다.
+                if (state.lockBackgroundGallery.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        state.lockBackgroundGallery.forEach { uri ->
+                            Box(
+                                modifier = Modifier
+                                    .size(66.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                                    .clickable { actions.removeBackground(uri) }
+                            ) {
+                                coil.compose.AsyncImage(
+                                    model = uri,
+                                    contentDescription = "배경 ${state.lockBackgroundGallery.indexOf(uri) + 1}번 (누르면 삭제)",
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(3.dp)
+                                        .size(18.dp)
+                                        .clip(androidx.compose.foundation.shape.CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.65f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                                }
+                            }
+                        }
+                    }
+                    SettingsToggleRow(
+                        icon = Icons.Default.AutoAwesomeMotion,
+                        title = "배경 자동 전환",
+                        subtitle = if (state.lockBackgroundAutoRotate) {
+                            "현재 ${state.lockBackgroundRotateSeconds}초마다 전환"
+                        } else {
+                            "2장 이상 등록해야 켤 수 있습니다"
+                        },
+                        tint = OneUi.OkTint,
+                        checked = state.lockBackgroundAutoRotate,
+                        enabled = state.lockBackgroundGallery.size > 1,
+                        onCheckedChange = actions.toggleBackgroundAutoRotate
+                    )
+                    if (state.lockBackgroundAutoRotate) {
+                        SettingsRow(
+                            icon = Icons.Default.Timer,
+                            title = "전환 간격",
+                            subtitle = "짧게 누를 때마다 다음 값으로 바뀝니다",
+                            tint = OneUi.InfoTint,
+                            value = "${state.lockBackgroundRotateSeconds}초",
+                            showChevron = true,
+                            onClick = actions.cycleBackgroundRotateSeconds
+                        )
+                    }
+                }
                 SettingsRow(
                     icon = Icons.Default.PhoneAndroid,
                     title = "잠금 화면 비상 연락처",

@@ -12,6 +12,7 @@ import com.example.util.AppLockPreferences
 import com.example.util.NotificationHighlightPrefs
 import com.example.util.NotificationHighlighter
 import com.example.util.NotificationSummaryService
+import java.util.Collections
 
 /**
  * 잠긴 앱 알림을 처리한다.
@@ -19,41 +20,83 @@ import com.example.util.NotificationSummaryService
  * - 강제 모드(미끼 세션): 알림을 지우고 중립적인 알림으로 대체
  * - 알림 보호 + 하이라이트 켬: 내용을 가린 파랑~보라 하이라이트 카드로 대체
  * - AI 키가 있으면 하이라이트 카드에 요약 한 줄을 덧붙임
+ *
+ * 주의: 교체를 취소 → 게시 순서로 하면 알림이 사라졌다 다시 뜨면서 깜빡인다.
+ * 반드시 교체를 먼저 올리고 원본을 나중에 지워야 빈틈이 없다.
  */
 class LockedAppNotificationListener : NotificationListenerService() {
 
-    override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        val notification = sbn ?: return
-        // 앱 자신의 알림(highlighted_alerts 등)은 재처리하면 안 된다.
-        if (notification.packageName == packageName) return
+    /** 이미 처리한 알림 키. 같은 알림이 여러 번 들어와도 한 번만 처리한다. */
+    private val handledKeys: MutableSet<String> = Collections.synchronizedSet(mutableSetOf<String>())
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        isConnected = true
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        isConnected = false
+        handledKeys.clear()
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        val sbn = sbn ?: return
         val context = applicationContext
+
+        // 앱 자신의 알림(highlighted_alerts 등)은 건드리면 안 된다.
+        // 이것을 빼먹으면 하이라이트 알림을 또 하이라이트로 바꿔 무한 반복하며 깜빡인다.
+        if (sbn.packageName == packageName) return
+
         val config = AppLockPreferences.getLockConfig(context)
 
         if (AppLockPreferences.isDuressSession(context)) {
-            cancelNotification(notification.key)
-            postNeutralNotification()
+            if (handledKeys.add(sbn.key)) {
+                postNeutralNotification()
+                // 중립 알림을 먼저 올린 뒤 원본을 지운다(그 반대 순서면 깜빡인다).
+                cancelNotification(sbn.key)
+            }
             return
         }
 
-        if (!AppLockPreferences.isPackageLocked(context, notification.packageName)) return
+        if (!AppLockPreferences.isPackageLocked(context, sbn.packageName)) return
         if (!config.isNotificationPrivacyEnabled) return
 
-        cancelNotification(notification.key)
+        if (sbn.notification.flags and Notification.FLAG_ONGOING_EVENT != 0) {
+            // 진행 중/技术服务 알림은 시스템이 취소를 막는다. 억지로 지우려 하지 않는다.
+            return
+        }
+        if (!handledKeys.add(sbn.key)) return
 
         if (!NotificationHighlightPrefs.isEnabled(context)) {
             postMaskedNotification()
+            cancelNotification(sbn.key)
             return
         }
 
         NotificationHighlighter.replaceWithHighlight(
             context = context,
-            sbn = notification,
+            sbn = sbn,
             style = NotificationHighlightPrefs.style(context),
             summaryProvider = { appLabel, content ->
                 NotificationSummaryService.summarize(context, appLabel, content)
-            }
+            },
+            onCancelOriginal = { cancelNotification(sbn.key) }
         )
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        sbn?.let { handledKeys.remove(it.key) }
+    }
+
+    /** 알림 접근 권한이 실제로 살아 있는지(자기 알림 말고 외부 알림을 받았는지). */
+    companion object {
+        @Volatile
+        var isConnected: Boolean = false
+            private set
+
+        /** 하이라이트 처리 중이던 원본 알림 키를 정리용으로 노출. */
+        internal fun forget(key: String) = Unit
     }
 
     private fun postMaskedNotification() {

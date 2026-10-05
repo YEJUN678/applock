@@ -1,12 +1,20 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -16,27 +24,62 @@ import coil.compose.AsyncImage
 import com.example.R
 import com.example.model.BackgroundTheme
 import com.example.ui.theme.CyberBgDark
+import kotlinx.coroutines.delay
 
+/**
+ * 잠금 화면 배경.
+ *
+ * 한 장만 쓸 수도 있고, 여러 장을 등록해 지정한 간격으로 자동 전환할 수도 있다.
+ * 전환은 페이드로 처리해 One UI 라이브 배경처럼 갑자기 바뀌지 않게 한다.
+ */
 @Composable
 fun AppLockBackground(
     theme: BackgroundTheme,
     customImageUri: String? = null,
     dimAmount: Float = 0.82f,
     blurAmount: Float = 0f,
+    galleryUris: List<String> = emptyList(),
+    autoRotate: Boolean = false,
+    rotateSeconds: Int = 30,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    // 블러는 API 31+ 에서만 실제 적용되고, 그 미만에서는 scrim 강도로 대신 처리한다.
+    // 단일 이미지 파라미터와 갤러리를 합쳐 하나의 목록으로 다룬다.
+    val images = remember(customImageUri, galleryUris) {
+        buildList {
+            if (!customImageUri.isNullOrBlank()) add(customImageUri)
+            galleryUris.forEach { if (it.isNotBlank() && it != customImageUri) add(it) }
+        }
+    }
+
+    var index by remember(images) { mutableIntStateOf(0) }
+
+    LaunchedEffect(images.size, autoRotate, rotateSeconds) {
+        // 이미지가 한 장 이하면 전환할 필요가 없다.
+        if (!autoRotate || images.size <= 1) return@LaunchedEffect
+        while (true) {
+            delay((rotateSeconds.coerceIn(5, 600) * 1000L))
+            index = (index + 1) % images.size
+        }
+    }
+
+    val fade = animateFloatAsState(
+        targetValue = if (images.size > 1) 1f else 0f,
+        animationSpec = tween(1200),
+        label = "bgFade"
+    )
+
     val blurDp = (blurAmount * 24f).dp
     val scrimBoost = blurAmount * 0.22f
+
     Box(modifier = modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().blur(if (blurAmount > 0.01f) blurDp else 0.dp)) {
-            if (!customImageUri.isNullOrBlank()) {
+            if (images.isNotEmpty()) {
                 AsyncImage(
-                    model = customImageUri,
+                    model = images[index.coerceIn(0, images.lastIndex)],
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().alpha(fade.value)
                 )
             } else when (theme) {
                 BackgroundTheme.CYBER_WALLPAPER -> {

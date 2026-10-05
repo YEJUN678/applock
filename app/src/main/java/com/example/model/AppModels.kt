@@ -77,6 +77,10 @@ data class LockConfig(
     val biometricEnabled: Boolean = true,
     val backgroundTheme: BackgroundTheme = BackgroundTheme.CYBER_WALLPAPER,
     val customLockBackgroundUri: String? = null,
+    // 여러 장을 등록해 자동 전환/슬라이드쇼로 보여준다
+    val lockBackgroundUris: List<String> = emptyList(),
+    val lockBackgroundAutoRotate: Boolean = false,
+    val lockBackgroundRotateSeconds: Int = 30,
     val lockScreenMessage: String = "",
     val lockIconScale: Float = 1f,
     val lockBackgroundDim: Float = 0.82f,
