@@ -208,26 +208,32 @@ fun SettingsRouter(
     }
 }
 
+/**
+ * 구획 화면 틀.
+ *
+ * 뒤로가기 버튼은 스크롤해도 따라오도록 리스트 밖(고정)에 둔다.
+ * 안에 넣으면 아래로 내릴 때 사라져서 되돌아가기 어렵다.
+ */
 @Composable
 internal fun SectionScaffold(
     section: SettingsSection,
     onBack: () -> Unit,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = OneUi.ScreenPadding,
-            end = OneUi.ScreenPadding,
-            top = 8.dp,
-            bottom = 32.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(OneUi.CardSpacing)
-    ) {
-        item {
-            SettingsScreenHeader(title = section.title, subtitle = section.description, onBack = onBack)
+    Column(Modifier.fillMaxSize()) {
+        SettingsScreenHeader(title = section.title, subtitle = section.description, onBack = onBack, floating = true)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = OneUi.ScreenPadding,
+                end = OneUi.ScreenPadding,
+                top = 4.dp,
+                bottom = 32.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(OneUi.CardSpacing)
+        ) {
+            content()
         }
-        content()
     }
 }
 
@@ -309,23 +315,23 @@ private fun SettingsHubScreen(
         }.distinctBy { it.label }
     }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = OneUi.ScreenPadding,
-            end = OneUi.ScreenPadding,
-            top = 8.dp,
-            bottom = 32.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(OneUi.CardSpacing)
-    ) {
-        item {
-            SettingsScreenHeader(
-                title = "설정",
-                subtitle = "잠금 ${state.lockedAppCount}개 · App Lock & Vault"
-            )
-        }
-
+    Column(modifier.fillMaxSize()) {
+        // 하단 구획 카드가 많으므로 제목 줄은 고정해 둔다.
+        SettingsScreenHeader(
+            title = "설정",
+            subtitle = "잠금 ${state.lockedAppCount}개 · App Lock & Vault",
+            floating = true
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = OneUi.ScreenPadding,
+                end = OneUi.ScreenPadding,
+                top = 4.dp,
+                bottom = 32.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(OneUi.CardSpacing)
+        ) {
         // 권한이 없으면 무엇이 막혔는지 먼저 보여준다.
         if (missingRequired) {
             item {
@@ -426,6 +432,7 @@ private fun SettingsHubScreen(
                     )
                 }
             }
+        }
         }
     }
 }

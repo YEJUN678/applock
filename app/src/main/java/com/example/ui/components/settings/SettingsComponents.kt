@@ -36,17 +36,32 @@ import com.example.ui.theme.TextSecondary
 
 /** One UI 계열 설정 화면 재사용 컴포넌트 모음. */
 
-/** 큰 제목 + 부제 (화면 상단 헤더). */
+/**
+ * 큰 제목 + 부제 (화면 상단 헤더).
+ *
+ * floating = true 이면 스크롤해도 따라오도록 고정 배경과 그림자를 갖게 한다.
+ */
 @Composable
 fun SettingsScreenHeader(
     title: String,
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
+    floating: Boolean = false,
     trailing: @Composable (() -> Unit)? = null
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (floating) {
+                    Modifier
+                        .background(OneUi.HeaderSurface)
+                        .padding(horizontal = OneUi.ScreenPadding, vertical = 10.dp)
+                } else {
+                    Modifier.padding(bottom = 4.dp)
+                }
+            )
     ) {
         if (onBack != null) {
             Box(

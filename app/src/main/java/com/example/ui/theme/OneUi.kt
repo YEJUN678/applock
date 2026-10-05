@@ -36,6 +36,10 @@ object OneUi {
     val Divider = Color(0xFF2E3D5B)
     val Pressed = Color(0xFF2A3550)
 
+    // 고정 헤더 배경. 스크롤하는 카드가 뒤로 비치면 글자가 뭉개지므로
+    // 배경색을 완전히 불투명하게 잡는다.
+    val HeaderSurface = Color(0xFF101726)
+
     // 상태색 (배지/아이콘 타일 배경에 사용)
     val OkTint = NeonGreen
     val WarnTint = NeonAmber
