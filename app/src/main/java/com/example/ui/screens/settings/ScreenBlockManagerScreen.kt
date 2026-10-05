@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -65,6 +66,8 @@ fun ScreenBlockManagerScreen(
     val context = LocalContext.current
     // 다른 앱을 쓰다가 돌아올 때 목록이 갱신돼야 한다.
     val refreshKey = remember { mutableStateOf(0) }
+    // 앱을 누르면 그 앱의 화면 목록으로 내려간다.
+    var selectedApp by remember { mutableStateOf<String?>(null) }
 
     val apps = remember(refreshKey.value) { ScreenBlockStore.appsWithScreens(context) }
     val totalBlocked = remember(refreshKey.value) { ScreenBlockStore.blockedCount(context) }
@@ -93,7 +96,7 @@ fun ScreenBlockManagerScreen(
             Column(Modifier.weight(1f)) {
                 Text("자세히 막기", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                 Text(
-                    if (totalBlocked > 0) "${apps.size}개 앱 · 화면 ${totalBlocked}개 잠금" else "아직 막은 화면이 없습니다",
+                    if (totalBlocked > 0) "앱 ${apps.size}개 · 화면 ${totalBlocked}개 잠금" else "아직 막은 화면이 없습니다",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )
@@ -144,11 +147,9 @@ fun ScreenBlockManagerScreen(
                     }
                     AppRow(
                         appName = appName.ifBlank { packageName },
+                        screenCount = ScreenBlockStore.screensOf(context, packageName).size,
                         blockedCount = blockedInApp,
-                        onClick = {
-                            refreshKey.value = refreshKey.value + 1
-                            onBack()
-                        }
+                        onClick = { selectedApp = packageName }
                     )
                 }
                 item {
@@ -161,6 +162,28 @@ fun ScreenBlockManagerScreen(
                 }
             }
         }
+    }
+
+    // 앱을 고르면 그 앱의 화면 목록으로 들어간다.
+    selectedApp?.let { pkg ->
+        ScreenBlockSheet(
+            packageName = pkg,
+            onBack = { selectedApp = null; refreshKey.value++ },
+            onToggle = { className, title, blocked ->
+                ScreenBlockStore.setBlocked(context, pkg, className, title, blocked)
+            },
+            onToggleAll = { blocked ->
+                ScreenBlockStore.setAllBlocked(context, pkg, blocked)
+            },
+            onRemove = { className, title ->
+                ScreenBlockStore.remove(context, pkg, className, title)
+            },
+            onForgetApp = {
+                ScreenBlockStore.forgetApp(context, pkg)
+                selectedApp = null
+                refreshKey.value++
+            }
+        )
     }
 }
 
@@ -200,7 +223,7 @@ fun ScreenBlockSheet(
             Column(Modifier.weight(1f)) {
                 Text("화면 선택", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                 Text(
-                    "${screens.size}개 화면 · 잠금 ${blockedCount}개",
+                    "화면 ${screens.size}개 · 잠금 ${blockedCount}개",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )
@@ -340,7 +363,7 @@ private fun TitleWarningCard() {
 }
 
 @Composable
-private fun AppRow(appName: String, blockedCount: Int, onClick: () -> Unit) {
+private fun AppRow(appName: String, screenCount: Int, blockedCount: Int, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -353,12 +376,16 @@ private fun AppRow(appName: String, blockedCount: Int, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(appName, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                if (blockedCount > 0) "화면 ${blockedCount}개 잠금 중" else "화면 없음",
+                when {
+                    blockedCount > 0 -> "화면 ${screenCount}개 중 ${blockedCount}개 잠금"
+                    screenCount > 0 -> "화면 ${screenCount}개 · 아직 선택 안 됨"
+                    else -> "기록 없음"
+                },
                 color = if (blockedCount > 0) OneUi.DangerTint else TextSecondary,
                 fontSize = 12.sp
             )
         }
-        Icon(Icons.Default.ArrowBack, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp).padding(2.dp))
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
     }
 }
 
