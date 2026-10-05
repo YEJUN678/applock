@@ -1,5 +1,11 @@
 package com.example.ui.screens.settings
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -434,13 +440,25 @@ private fun TitleWarningCard() {
 
 @Composable
 private fun AppRow(appName: String, screenCount: Int, blockedCount: Int, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+        label = "appRowScale"
+    )
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .fillMaxWidth()
             .clip(RoundedCornerShape(OneUi.CardRadius))
-            .background(OneUi.CardSurface)
-            .clickable(onClick = onClick)
+            .background(if (pressed) OneUi.Pressed else OneUi.CardSurface)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
             .padding(OneUi.CardPadding)
     ) {
         Column(Modifier.weight(1f)) {

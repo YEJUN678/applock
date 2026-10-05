@@ -1,6 +1,16 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +43,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,6 +112,9 @@ fun HomeDashboardScreen(
     }
     val timeFormat = SimpleDateFormat("HH:mm", Locale.KOREA)
     val recent = sessionLog.take(5)
+    // 화면에 나타난 뒤 점수·카드 애니메이션이 순서대로 시작되게 한다.
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -142,14 +156,23 @@ fun HomeDashboardScreen(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    ScoreRing(score = score, ready = requiredReady)
+                    ScoreRing(score = score, ready = requiredReady, appeared = appeared)
                 }
                 Spacer(Modifier.height(14.dp))
+                // 바도 링과 같은 박자로 채워지게 해야 둘이 어긋나 보이지 않는다.
+                val barProgress by animateFloatAsState(
+                    targetValue = if (appeared) score / 100f else 0f,
+                    animationSpec = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+                    label = "scoreBar"
+                )
                 LinearProgressIndicator(
-                    progress = { score / 100f },
+                    progress = { barProgress },
                     color = if (requiredReady) OneUi.OkTint else OneUi.DangerTint,
                     trackColor = OneUi.Divider,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
                 )
                 if (!requiredReady) {
                     Spacer(Modifier.height(12.dp))
@@ -184,16 +207,16 @@ fun HomeDashboardScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(OneUi.CardSpacing), modifier = Modifier.fillMaxWidth()) {
-                QuickAction("금고 열기", Icons.Default.Lock, OneUi.OkTint, Modifier.weight(1f), onOpenVault)
-                QuickAction("침입 기록", Icons.Default.Psychology, OneUi.DangerTint, Modifier.weight(1f), onOpenLogs)
-                QuickAction("설정", Icons.Default.Shield, OneUi.AccentTint, Modifier.weight(1f), onOpenSettings)
+                AnimatedQuickAction("금고 열기", Icons.Default.Lock, OneUi.OkTint, Modifier.weight(1f), onOpenVault)
+                AnimatedQuickAction("침입 기록", Icons.Default.Psychology, OneUi.DangerTint, Modifier.weight(1f), onOpenLogs)
+                AnimatedQuickAction("설정", Icons.Default.Shield, OneUi.AccentTint, Modifier.weight(1f), onOpenSettings)
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(OneUi.CardSpacing), modifier = Modifier.fillMaxWidth()) {
-                QuickAction("통계", Icons.Default.InsertChart, OneUi.AccentTint, Modifier.weight(1f), onOpenStats)
-                QuickAction("증거 AI", Icons.Default.Psychology, OneUi.InfoTint, Modifier.weight(1f), onOpenEvidenceAi)
-                QuickAction("권한 도우미", Icons.Default.Shield, OneUi.OkTint, Modifier.weight(1f), onOpenPermissionWizard)
+                AnimatedQuickAction("통계", Icons.Default.InsertChart, OneUi.AccentTint, Modifier.weight(1f), onOpenStats)
+                AnimatedQuickAction("증거 AI", Icons.Default.Psychology, OneUi.InfoTint, Modifier.weight(1f), onOpenEvidenceAi)
+                AnimatedQuickAction("권한 도우미", Icons.Default.Shield, OneUi.OkTint, Modifier.weight(1f), onOpenPermissionWizard)
             }
         }
 
@@ -315,8 +338,13 @@ fun HomeDashboardScreen(
 }
 
 @Composable
-private fun ScoreRing(score: Int, ready: Boolean) {
-    val animated by animateFloatAsState(targetValue = score / 100f, label = "score")
+private fun ScoreRing(score: Int, ready: Boolean, appeared: Boolean) {
+    // 화면에 나타날 때 0에서 점수까지 부드럽게 채워진다.
+    val animated by animateFloatAsState(
+        targetValue = if (appeared) score / 100f else 0f,
+        animationSpec = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+        label = "score"
+    )
     androidx.compose.foundation.Canvas(modifier = Modifier.size(72.dp)) {
         val stroke = 7.dp.toPx()
         val inset = stroke / 2
@@ -385,6 +413,54 @@ private fun QuickAction(
             .clip(RoundedCornerShape(OneUi.CardRadius))
             .background(OneUi.CardSurface)
             .clickable(onClick = onClick)
+            .padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(Modifier.size(38.dp).background(OneUi.tintAlpha(tint), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(label, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+/**
+ * 빠르게 누를 타일에 눌림 반응을 넣은 버전.
+ * 실행이 많아서 반복해서 누르는 곳이라 손맛이 중요합니다.
+ */
+@Composable
+private fun AnimatedQuickAction(
+    label: String,
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+        label = "quickScale"
+    )
+    val surface by animateColorAsState(
+        targetValue = if (pressed) OneUi.Pressed else OneUi.CardSurface,
+        animationSpec = tween(if (pressed) 60 else 300),
+        label = "quickSurface"
+    )
+    Column(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(OneUi.CardRadius))
+            .background(surface)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
             .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

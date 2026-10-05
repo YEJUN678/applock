@@ -1,5 +1,17 @@
 package com.example.ui.components.settings
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -96,18 +109,28 @@ fun SettingsSectionLabel(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** One UI 카드: 둥근 24dp + 여백. */
+/**
+ * One UI 카드: 둥근 24dp + 여백 + 미묘한 테두리.
+ *
+ * 테두리가 있어야 배경과 구분이 되며, One UI 처럼 아주 옅게 준다(강하면 노후돼 보인다).
+ */
 @Composable
 fun SettingsCard(
     modifier: Modifier = Modifier,
     accent: Color = OneUi.Card,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val border by animateColorAsState(
+        targetValue = OneUi.Divider.copy(alpha = 0.55f),
+        animationSpec = tween(180),
+        label = "cardBorder"
+    )
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(OneUi.CardRadius))
             .background(accent)
+            .border(1.dp, border, RoundedCornerShape(OneUi.CardRadius))
             .padding(OneUi.CardPadding),
         content = content
     )
@@ -162,21 +185,43 @@ fun SettingsRow(
     highlightQuery: String = "",
     trailing: @Composable (() -> Unit)? = null
 ) {
-    val clickModifier = if (onClick != null && enabled) {
-        Modifier.clickable(onClick = onClick)
+    val interactive = onClick != null && enabled
+    // 눌린 동안만 배경을 밝힌다. One UI 처럼 즉시 반응하고 짧게 사라진다.
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressColor by animateColorAsState(
+        targetValue = if (pressed) OneUi.Pressed else OneUi.RowSurface,
+        animationSpec = tween(if (pressed) 60 else 260),
+        label = "rowPress"
+    )
+    // 아이콘 타일은 살짝 커졌다가 돌아온다(터치 피드백).
+    val iconScale by animateFloatAsState(
+        targetValue = if (pressed) 0.92f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow),
+        label = "iconScale"
+    )
+    val clickModifier = if (interactive) {
+        Modifier.clickable(
+            interactionSource = interactionSource,
+            indication = null, // pressed 상태를 직접 그리기 때문에 기본 indication 은 끈다
+            onClick = onClick!!
+        )
     } else {
         Modifier
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = OneUi.RowMinHeight).clip(RoundedCornerShape(OneUi.RowRadius))
-            .then(if (onClick != null && enabled) Modifier.background(OneUi.RowSurface) else Modifier)
+            .then(if (interactive) Modifier.background(pressColor) else Modifier)
             .then(clickModifier)
             .padding(OneUi.RowPadding)
     ) {
         if (icon != null) {
             Box(
-                modifier = Modifier.size(OneUi.IconTile).clip(RoundedCornerShape(13.dp)).background(OneUi.tintAlpha(tint)),
+                modifier = Modifier.size(OneUi.IconTile)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(OneUi.tintAlpha(tint))
+                    .graphicsLayer { scaleX = iconScale; scaleY = iconScale },
                 contentAlignment = Alignment.Center
             ) { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(OneUi.IconGlyph)) }
             Spacer(Modifier.width(14.dp))
@@ -213,7 +258,11 @@ fun SettingsRow(
     }
 }
 
-/** 스위치가 붙은 행. */
+/**
+ * 스위치가 붙은 행.
+ *
+ * 스위치 자체가 커지는 애니메이션을 넣어 손가락이 닿은 느낌을 준다.
+ */
 @Composable
 fun SettingsToggleRow(
     icon: ImageVector?,
@@ -224,6 +273,23 @@ fun SettingsToggleRow(
     enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    // 켤 때는 살짝 커지고, 끌 때는 원래 크기로 스르르 돌아온다.
+    val thumbScale by animateFloatAsState(
+        targetValue = if (checked) 1.12f else 1f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+        label = "thumbScale"
+    )
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) tint else OneUi.Divider,
+        animationSpec = tween(220),
+        label = "trackColor"
+    )
+    val knobColor by animateColorAsState(
+        targetValue = if (checked) androidx.compose.ui.graphics.Color.Black else TextSecondary,
+        animationSpec = tween(220),
+        label = "knobColor"
+    )
+
     SettingsRow(
         icon = icon,
         title = title,
@@ -233,7 +299,18 @@ fun SettingsToggleRow(
         onClick = { if (enabled) onCheckedChange(!checked) },
         trailing = {
             // Row 자체가 클릭 가능하므로 스위치는 표시 전용으로 쓴다(중복 토글 방지).
-            Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                enabled = enabled,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = knobColor,
+                    checkedTrackColor = trackColor,
+                    uncheckedThumbColor = knobColor,
+                    uncheckedTrackColor = OneUi.Divider,
+                    uncheckedBorderColor = OneUi.Divider
+                )
+            )
         }
     )
 }
