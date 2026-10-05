@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CloudUpload
@@ -38,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.model.AiGuardFallback
 import com.example.model.LockType
+import com.example.util.NotificationHighlighter
 import com.example.ui.components.settings.SettingsCard
 import com.example.ui.components.settings.SettingsChoiceSheet
 import com.example.ui.components.settings.SettingsInfoRow
@@ -107,6 +109,41 @@ fun SecuritySectionScreen(state: SettingsUiState, actions: SettingsUiActions, on
                     checked = state.lockConfig.isNotificationPrivacyEnabled,
                     onCheckedChange = actions.toggleNotificationPrivacy
                 )
+                SettingsToggleRow(
+                    icon = Icons.Default.AutoAwesome,
+                    title = "알림 하이라이트",
+                    subtitle = "보호된 알림을 파랑~보라 카드로 바꿔 보여줍니다",
+                    tint = OneUi.AccentTint,
+                    checked = state.notificationHighlightEnabled,
+                    onCheckedChange = actions.toggleNotificationHighlight
+                )
+                if (state.notificationHighlightEnabled) {
+                    SettingsRow(
+                        icon = Icons.Default.Palette,
+                        title = "하이라이트 색상",
+                        subtitle = when (state.notificationHighlightStyle) {
+                            HighlightStyle.BLUE_VIOLET -> "파랑 → 보라"
+                            HighlightStyle.VIOLET -> "보라 중심"
+                            HighlightStyle.TEAL -> "청록 → 남색"
+                        },
+                        tint = OneUi.InfoTint,
+                        showChevron = true,
+                        onClick = actions.cycleHighlightStyle
+                    )
+                    SettingsToggleRow(
+                        icon = Icons.Default.AutoAwesome,
+                        title = "AI 요약 붙이기",
+                        subtitle = if (state.aiKeyConfigured) {
+                            "알림 내용을 AI 로 한 줄 요약합니다 (본문 전송)"
+                        } else {
+                            "AI 키를 먼저 설정해 주세요 (증거 AI 분석 화면)"
+                        },
+                        tint = OneUi.OkTint,
+                        checked = state.aiSummaryEnabled,
+                        enabled = state.aiKeyConfigured,
+                        onCheckedChange = actions.toggleAiSummary
+                    )
+                }
                 SettingsToggleRow(
                     icon = Icons.Default.VerifiedUser,
                     title = "앱 자체 보호",

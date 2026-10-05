@@ -71,6 +71,9 @@ import com.example.util.BiometricHelper
 import com.example.util.BiometricStatus
 import com.example.util.QrRecoveryManager
 import com.example.util.LostModeManager
+import com.example.util.AiSettings
+import com.example.util.NotificationHighlightPrefs
+import com.example.util.NotificationHighlighter
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -280,6 +283,28 @@ class MainActivity : FragmentActivity() {
         val updated = AppLockPreferences.getLockConfig(this).copy(isNotificationPrivacyEnabled = enabled)
         AppLockPreferences.saveLockConfig(this, updated)
         if (enabled) startActivity(android.content.Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+    }
+    fun setNotificationHighlight(enabled: Boolean) {
+        NotificationHighlightPrefs.setEnabled(this, enabled)
+        if (enabled) {
+            NotificationHighlighter.ensureChannel(this)
+            if (!AppLockPermissionHelper.hasNotificationListenerPermission(this)) {
+                Toast.makeText(this, "알림 접근 권한을 허용해야 하이라이트가 동작합니다.", Toast.LENGTH_LONG).show()
+                startActivity(android.content.Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
+        }
+    }
+    fun cycleNotificationHighlightStyle() {
+        val order = NotificationHighlighter.Style.entries
+        val next = order[(order.indexOf(NotificationHighlightPrefs.style(this)) + 1) % order.size]
+        NotificationHighlightPrefs.setStyle(this, next)
+    }
+    fun setAiSummary(enabled: Boolean) {
+        if (enabled && !AiSettings.isConfigured(this)) {
+            Toast.makeText(this, "AI 키를 먼저 입력해 주세요. 증거 AI 분석 화면의 AI 키 버튼을 누르세요.", Toast.LENGTH_LONG).show()
+            return
+        }
+        NotificationHighlightPrefs.setAiSummaryEnabled(this, enabled)
     }
     fun showLauncherDisguiseChooser() {
         val options = arrayOf("기본 App Lock", "계산기", "메모장")
@@ -974,6 +999,13 @@ fun AppLockerApp(
                     onShowToast("실행 기록을 지웠습니다.")
                 },
                 onToggleNotificationPrivacy = { enabled -> (context as? MainActivity)?.setNotificationPrivacy(enabled) },
+                notificationHighlightEnabled = NotificationHighlightPrefs.isEnabled(context),
+                notificationHighlightStyle = NotificationHighlightPrefs.style(context),
+                aiSummaryEnabled = NotificationHighlightPrefs.isAiSummaryEnabled(context),
+                aiKeyConfigured = AiSettings.isConfigured(context),
+                onToggleNotificationHighlight = { enabled -> (context as? MainActivity)?.setNotificationHighlight(enabled) },
+                onCycleHighlightStyle = { (context as? MainActivity)?.cycleNotificationHighlightStyle() },
+                onToggleAiSummary = { enabled -> (context as? MainActivity)?.setAiSummary(enabled) },
                 isFaceDownProtectionEnabled = faceDownProtectionEnabled,
                 onToggleFaceDownProtection = { enabled ->
                     AppLockPreferences.setFaceDownProtectionEnabled(context, enabled)

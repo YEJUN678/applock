@@ -227,6 +227,13 @@ fun AppLockerHomeScreen(
     isFaceDownProtectionEnabled: Boolean = false,
     onToggleFaceDownProtection: (Boolean) -> Unit = {},
     onRequestAiGuardAudioPermission: () -> Unit = {},
+    notificationHighlightEnabled: Boolean = false,
+    notificationHighlightStyle: com.example.util.NotificationHighlighter.Style = com.example.util.NotificationHighlighter.Style.BLUE_VIOLET,
+    aiSummaryEnabled: Boolean = false,
+    aiKeyConfigured: Boolean = false,
+    onToggleNotificationHighlight: (Boolean) -> Unit = {},
+    onCycleHighlightStyle: () -> Unit = {},
+    onToggleAiSummary: (Boolean) -> Unit = {},
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -944,6 +951,13 @@ fun AppLockerHomeScreen(
                             sessionLog = sessionLog,
                             onClearSessionLog = onClearSessionLog,
                             onToggleNotificationPrivacy = onToggleNotificationPrivacy,
+                            notificationHighlightEnabled = notificationHighlightEnabled,
+                            notificationHighlightStyle = notificationHighlightStyle,
+                            aiSummaryEnabled = aiSummaryEnabled,
+                            aiKeyConfigured = aiKeyConfigured,
+                            onToggleNotificationHighlight = onToggleNotificationHighlight,
+                            onCycleHighlightStyle = onCycleHighlightStyle,
+                            onToggleAiSummary = onToggleAiSummary,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
@@ -1151,7 +1165,14 @@ fun SettingsView(
     onResetAiGuardLearning: () -> Unit = {},
     onRequestAiGuardAudioPermission: () -> Unit = {},
     onToggleIntruderSiren: (Boolean) -> Unit = {},
-    onTogglePanicShake: (Boolean) -> Unit = {}
+    onTogglePanicShake: (Boolean) -> Unit = {},
+    notificationHighlightEnabled: Boolean = false,
+    notificationHighlightStyle: com.example.util.NotificationHighlighter.Style = com.example.util.NotificationHighlighter.Style.BLUE_VIOLET,
+    aiSummaryEnabled: Boolean = false,
+    aiKeyConfigured: Boolean = false,
+    onToggleNotificationHighlight: (Boolean) -> Unit = {},
+    onCycleHighlightStyle: () -> Unit = {},
+    onToggleAiSummary: (Boolean) -> Unit = {}
 ) {
     val state = SettingsUiState(
         lockConfig = lockConfig,
@@ -1168,7 +1189,11 @@ fun SettingsView(
         recoveryConfigured = recoveryConfigured,
         recoveryKeyConfigured = recoveryKeyConfigured,
         recoveryKeyFailedAttempts = recoveryKeyFailedAttempts,
-        sessionCount = sessionLog.size
+        sessionCount = sessionLog.size,
+        notificationHighlightEnabled = notificationHighlightEnabled,
+        notificationHighlightStyle = notificationHighlightStyle,
+        aiSummaryEnabled = aiSummaryEnabled,
+        aiKeyConfigured = aiKeyConfigured
     )
 
     val actions = SettingsUiActions(
@@ -1177,6 +1202,9 @@ fun SettingsView(
         requestUsageStats = onRequestUsageStatsPermission,
         openPermissionWizard = onOpenPermissionWizard,
         toggleNotificationPrivacy = onToggleNotificationPrivacy,
+        toggleNotificationHighlight = onToggleNotificationHighlight,
+        cycleHighlightStyle = onCycleHighlightStyle,
+        toggleAiSummary = onToggleAiSummary,
         toggleAppSelfProtect = onToggleAppSelfProtect,
         toggleUninstallProtection = onToggleUninstallProtection,
         toggleScreenOffLock = onToggleScreenOffLock,

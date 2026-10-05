@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import com.example.model.AiGuardFallback
 import com.example.model.LockConfig
 import com.example.model.LockType
+import com.example.util.NotificationHighlighter
 import com.example.ui.components.settings.SettingsCard
 import com.example.ui.components.settings.SettingsChoiceSheet
 import com.example.ui.components.settings.SettingsHubCard
@@ -88,8 +89,15 @@ data class SettingsUiState(
     val recoveryConfigured: Boolean = false,
     val recoveryKeyConfigured: Boolean = false,
     val recoveryKeyFailedAttempts: Int = 0,
-    val sessionCount: Int = 0
+    val sessionCount: Int = 0,
+    val notificationHighlightEnabled: Boolean = false,
+    val notificationHighlightStyle: NotificationHighlighter.Style = NotificationHighlighter.Style.BLUE_VIOLET,
+    val aiSummaryEnabled: Boolean = false,
+    val aiKeyConfigured: Boolean = false
 )
+
+/** 설정 화면에서 쓰는 색상 열거형 별칭(UI 층이 util 타입을 직접 다루지 않도록 한다). */
+typealias HighlightStyle = NotificationHighlighter.Style
 
 /** 설정 화면이 호출하는 동작 모음. */
 data class SettingsUiActions(
@@ -98,6 +106,9 @@ data class SettingsUiActions(
     val requestUsageStats: () -> Unit = {},
     val openPermissionWizard: () -> Unit = {},
     val toggleNotificationPrivacy: (Boolean) -> Unit = {},
+    val toggleNotificationHighlight: (Boolean) -> Unit = {},
+    val cycleHighlightStyle: () -> Unit = {},
+    val toggleAiSummary: (Boolean) -> Unit = {},
     val toggleAppSelfProtect: (Boolean) -> Unit = {},
     val toggleUninstallProtection: (Boolean) -> Unit = {},
     val toggleScreenOffLock: (Boolean) -> Unit = {},
@@ -221,6 +232,9 @@ private val SEARCH_INDEX = listOf(
     SettingEntry(SettingsSection.SECURITY, "다른 앱 위에 표시", "권한 overlay 잠금창"),
     SettingEntry(SettingsSection.SECURITY, "사용 정보 접근", "권한 앱 실행 감지"),
     SettingEntry(SettingsSection.SECURITY, "잠긴 앱 알림 숨김", "권한 알림 개인정보"),
+    SettingEntry(SettingsSection.SECURITY, "알림 하이라이트", "알림 파랑 보라 카드"),
+    SettingEntry(SettingsSection.SECURITY, "하이라이트 색상", "알림 파랑 보라 스타일"),
+    SettingEntry(SettingsSection.SECURITY, "AI 요약 붙이기", "알림 AI 요약 cloud"),
     SettingEntry(SettingsSection.SECURITY, "앱 자체 보호", "이 앱도 잠금"),
     SettingEntry(SettingsSection.SECURITY, "미해제 방지", "잠금 제거 보호"),
     SettingEntry(SettingsSection.SECURITY, "Lost Mode", "분실 위치 추적"),
