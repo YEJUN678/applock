@@ -83,7 +83,10 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
       # 6. 빌드 성공 시 GitHub 릴리스 생성 + APK 첨부 (versions.txt 의 apkUrl 이 가리키는 태그)
+      #    gh CLI 는 인증 정보가 없으면 즉시 실패하므로 워크플로 토큰을 넘겨 줘야 한다.
       - name: Publish release with APK
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           name="$(cat release_name.txt)"
@@ -96,12 +99,17 @@ jobs:
             exit 0
           fi
 
-          gh release create "$tag" "$apk" \
+          if ! gh release create "$tag" "$apk" \
             --title "App Lock & Vault v${name}" \
-            --notes "$notes"
+            --notes "$notes"; then
+            echo "::error title=릴리스 생성 실패::태그 $tag 의 릴리스 생성을 못 했습니다 (인증 또는 권한 문제). versions.txt 의 apkUrl 을 손으로 확인해 주세요."
+            exit 1
+          fi
           echo "릴리스 생성 완료: $tag"
 
       - name: Verify published APK URL
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           apk="$(grep -E '^apkUrl=' versions.txt | head -1 | cut -d= -f2- | tr -d '\r')"
