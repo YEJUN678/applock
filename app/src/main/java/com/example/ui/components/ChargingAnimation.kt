@@ -5,6 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -48,8 +54,18 @@ import com.example.ui.theme.TextSecondary
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** 충전 상태. */
-data class ChargingState(val isCharging: Boolean, val levelPercent: Int = 0, val isFull: Boolean = false)
+/**
+ * 충전 상태.
+ *
+ * [justStarted] 는 충전기�� 꽂은 그 순간에만 true 다.
+ * 사용자는 "충전 시작"을 한 번만 보고 싶어 한다. 이후로는 정지된 표시만 보면 된다.
+ */
+data class ChargingState(
+    val isCharging: Boolean,
+    val levelPercent: Int = 0,
+    val isFull: Boolean = false,
+    val justStarted: Boolean = false
+)
 
 /**
  * 실제 충전 상태를 시스템에서 읽는다.
@@ -64,7 +80,10 @@ fun rememberChargingState(): State<ChargingState> {
     DisposableEffect(preview) {
         if (preview) return@DisposableEffect onDispose { }
 
-        fun readFrom(intent: Intent?): ChargingState {
+        // 충전이 시작됐는지 따로 기억한다. 시작 순간에만 true 를 내보내야 한다.
+        var wasCharging = false
+
+        fun readFrom(intent: Intent?, plugEvent: Boolean): ChargingState {
             val batteryIntent = intent ?: context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
                 ?: return ChargingState(false)
             val level = batteryIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
@@ -73,17 +92,25 @@ fun rememberChargingState(): State<ChargingState> {
             val plugged = batteryIntent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
             val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
             val full = status == BatteryManager.BATTERY_STATUS_FULL
+            val charging = plugged != 0 || status == BatteryManager.BATTERY_STATUS_CHARGING
+
+            // 충전기 연결/해제 방송일 때만 새로 시작한 것으로 본다.
+            val started = charging && !wasCharging && plugEvent
+            wasCharging = charging
+
             return ChargingState(
-                isCharging = plugged != 0 || status == BatteryManager.BATTERY_STATUS_CHARGING,
+                isCharging = charging,
                 levelPercent = percent,
-                isFull = full
+                isFull = full,
+                justStarted = started
             )
         }
 
-        state = readFrom(null)
+        state = readFrom(null, plugEvent = false)
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
-                state = readFrom(intent)
+                val plugEvent = intent?.action == Intent.ACTION_POWER_CONNECTED
+                state = readFrom(intent, plugEvent)
             }
         }
         val filter = IntentFilter().apply {
@@ -113,25 +140,72 @@ fun ChargingAnimation(
     modifier: Modifier = Modifier,
     accent: Color = NeonCyan
 ) {
-    val transition = rememberInfiniteTransition(label = "charging")
-    val pulse by transition.animateFloat(
+    // 충전 시작 순간에만 아주 짧게 움직이고, 그 뒤로는 완전히 정지한다.
+    val transient = rememberInfiniteTransition(label = "charging")
+    val transientPulse by transient.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (state.isFull) 2400 else 1600, easing = LinearEasing),
+            animation = tween(durationMillis = 900),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "pulse"
+        label = "transientPulse"
     )
-    val spin by transition.animateFloat(
+    val transientSpin by transient.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(animation = tween(2600, easing = LinearEasing)),
-        label = "spin"
+        animationSpec = infiniteRepeatable(animation = tween(1400)),
+        label = "transientSpin"
+    )
+    // 한 번 지나간 뒤에는 0 / 0 에서 멈춘 값으로 고정된다.
+    var shown by remember { mutableFloatStateOf(0.5f) }
+    var shownSpin by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(state.justStarted) {
+        if (!state.justStarted) return@LaunchedEffect
+        // 충전 시작 시 0.8초 동안만 움직이고, 그 뒤 완전히 멈춘다.
+        shown = 0f
+        shownSpin = 0f
+        val startedAt = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startedAt < 800) {
+            shown = transientPulse
+            shownSpin = transientSpin
+            delay(60)
+        }
+        // 정지 상태는 아래 그려지는 정적 표현(맥동 0.5, 회전 0)을 유지한다.
+        shown = 0.5f
+        shownSpin = 0f
+    }
+    // 충전 시작 순간에만 움직이고, 이후에는 고정된 값으로 멈춰 있는다.
+    val pulse = shown
+    val spin = shownSpin
+
+    // 충전기 꽂은 순간에만 가운데에서 한 번 나타나고, 그 뒤로는 멈춰 있는다.
+    // 계속 움직이면 잠금 화면이 산뜻거려서 불편하다.
+    var revealed by remember(style) { mutableStateOf(!state.justStarted) }
+    LaunchedEffect(style, state.justStarted) {
+        if (state.justStarted) {
+            revealed = false
+            delay(420)
+            revealed = true
+        } else {
+            revealed = true
+        }
+    }
+    val enter by animateFloatAsState(
+        targetValue = if (revealed) 1f else 0f,
+        animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+        label = "chargingEnter"
     )
 
     Box(
-        modifier = modifier.aspectRatio(1f),
+        modifier = modifier
+            .aspectRatio(1f)
+            // 처음엔 아주 작게였다가 커지며 나타난다(가운데에서 부풀어 나오는 느낌).
+            .graphicsLayer {
+                scaleX = 0.4f + 0.6f * enter
+                scaleY = 0.4f + 0.6f * enter
+                alpha = enter
+            },
         contentAlignment = Alignment.Center
     ) {
         when (style) {

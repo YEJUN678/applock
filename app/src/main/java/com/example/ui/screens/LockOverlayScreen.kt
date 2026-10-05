@@ -642,6 +642,7 @@ fun LockOverlayScreen(
                 val chargingState = com.example.ui.components.rememberChargingState().value
                 if (chargingState.isCharging) {
                     com.example.ui.components.ChargingIndicator(
+                        // fillMaxWidth 를 주면 폭이 1:1 을 잃어 찌부려 보인다. 가운데 정사각형으로 고정.
                         style = lockChargingStyle,
                         state = chargingState,
                         modifier = Modifier.fillMaxWidth(),
