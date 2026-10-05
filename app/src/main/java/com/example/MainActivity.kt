@@ -72,6 +72,11 @@ import com.example.util.BiometricStatus
 import com.example.util.QrRecoveryManager
 import com.example.util.LostModeManager
 import com.example.util.AiSettings
+import com.example.util.GeminiClient
+import com.example.util.SessionReportRenderer
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.example.util.NotificationHighlightPrefs
 import com.example.util.NotificationHighlighter
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
@@ -354,6 +359,134 @@ class MainActivity : FragmentActivity() {
         }
         NotificationHighlightPrefs.setAiSummaryEnabled(this, enabled)
     }
+    /** 설정 화면에서 AI 키 입력 창을 연다. */
+    fun showAiKeyDialog() {
+        val currentKey = AiSettings.apiKey(this).orEmpty()
+        val input = android.widget.EditText(this).apply {
+            setText(currentKey)
+            hint = "Gemini API 키"
+            setSingleLine()
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        val modelInput = android.widget.EditText(this).apply {
+            setText(AiSettings.model(this@MainActivity))
+            hint = "모델 이름 (예: gemini-3.8-flash)"
+            setSingleLine()
+        }
+        val wrapper = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+            addView(modelInput)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("AI 키 설정")
+            .setMessage("키는 기기 안의 Keystore로 암호화해서만 저장됩니다. 공개 저장소나 서버로 전송하지 않습니다.")
+            .setView(wrapper)
+            .setPositiveButton("저장") { _, _ ->
+                val key = input.text.toString().trim()
+                if (key.isBlank()) {
+                    Toast.makeText(this, "키를 입력해 주세요.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                AiSettings.setModel(this, modelInput.text.toString().trim().ifBlank { AiSettings.DEFAULT_MODEL })
+                if (AiSettings.setApiKey(this, key)) {
+                    Toast.makeText(this, "AI 키를 암호화해 저장했습니다.", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "키를 저장하지 못했습니다.", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNeutralButton("삭제") { _, _ ->
+                AiSettings.clearApiKey(this)
+                Toast.makeText(this, "AI 키를 삭제했습니다.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    /** 키가 실제로 통하는지 한 번 호출해 확인한다. */
+    fun testAiKey() {
+        Toast.makeText(this, "AI 키를 확인하는 중... (쿼터를 아주 조금 씁니다)", Toast.LENGTH_SHORT).show()
+        Thread {
+            val result = GeminiClient.ask(this, "한 단어로만 답: 정상")
+            runOnUiThread {
+                when (result) {
+                    is GeminiClient.Result.Success ->
+                        Toast.makeText(this, "키 정상: ${result.text.take(40)}", Toast.LENGTH_LONG).show()
+                    is GeminiClient.Result.Failure ->
+                        Toast.makeText(this, "확인 실패: ${result.reason}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    /**
+ * 잠금 해제 기록을 PNG 리포트로 만든다.
+ * @param withAi AI 요약을 덧붙일지 여부. 키가 없으면 조용히 건너뛴다.
+ */
+    /** 홈 화면에 표시되는 앱 수(런처에 노출되는 앱)를 센다. */
+    private fun countLaunchableApps(): Int = runCatching {
+        val intent = android.content.Intent(android.content.Intent.ACTION_MAIN, null).apply {
+            addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+        }
+        packageManager.queryIntentActivities(intent, 0).size
+    }.getOrDefault(0)
+
+    fun exportSessionReport(withAi: Boolean) {
+        val sessions = AppLockPreferences.getSessionLog(this)
+        val dayFormat = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
+        val labelFormat = SimpleDateFormat("EEEEE", Locale.KOREA)
+        val dayCounts = (6 downTo 0).map { back ->
+            val cal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -back) }
+            val key = dayFormat.format(cal.time)
+            labelFormat.format(cal.time) to sessions.count { dayFormat.format(Date(it.timestamp)) == key }
+        }
+        val topApps = sessions.groupingBy { it.appName }.eachCount()
+            .entries.sortedByDescending { it.value }
+            .take(6)
+            .map { it.key to it.value }
+        val lockedCount = AppLockPreferences.getLockedPackages(this).size
+
+        if (withAi && !AiSettings.isConfigured(this)) {
+            Toast.makeText(this, "AI 키가 없어 요약 없이 만듭니다. 설정 → AI 키에서 입력해 보세요.", Toast.LENGTH_LONG).show()
+        }
+
+        Toast.makeText(this, "리포트를 만드는 중...", Toast.LENGTH_SHORT).show()
+        Thread {
+            val summary = if (withAi && AiSettings.isConfigured(this)) {
+                val facts = buildString {
+                    appendLine("최근 7일 잠금 해제 통계다.")
+                    appendLine("총 ${sessions.size}회 해제, 잠긴 앱 ${lockedCount}개.")
+                    appendLine("일자별: " + dayCounts.joinToString(", ") { "${it.first} ${it.second}회" })
+                    append("자주 연 앱: " + topApps.joinToString(", ") { "${it.first} ${it.second}회" })
+                }
+                when (val result = GeminiClient.ask(this, "$facts\n\n위 통계를 한국어 3줄 안으로 요약하라. 판단이나 조언 없이 숫자 사실만 정리하라.")) {
+                    is GeminiClient.Result.Success -> result.text
+                    is GeminiClient.Result.Failure -> null
+                }
+            } else null
+
+            val file = SessionReportRenderer.render(
+                context = this,
+                totalUnlocks = sessions.size,
+                lockedAppCount = lockedCount,
+                totalAppCount = countLaunchableApps(),
+                dayCounts = dayCounts,
+                topApps = topApps,
+                aiSummary = summary
+            )
+            runOnUiThread {
+                Toast.makeText(
+                    this,
+                    if (file != null) "리포트를 저장했습니다 (사진첩/AppLockReports)" else "리포트 생성에 실패했습니다.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }.start()
+    }
+
     fun showLauncherDisguiseChooser() {
         val options = arrayOf("기본 App Lock", "계산기", "메모장")
         AlertDialog.Builder(this).setTitle("위장 아이콘").setItems(options) { _, choice ->
@@ -1058,6 +1191,11 @@ fun AppLockerApp(
                 onRemoveBackground = { uri -> (context as? MainActivity)?.removeLockBackground(uri) },
                 onToggleBackgroundAutoRotate = { enabled -> (context as? MainActivity)?.setLockBackgroundAutoRotate(enabled) },
                 onCycleBackgroundRotateSeconds = { (context as? MainActivity)?.cycleLockBackgroundRotateSeconds() },
+                aiKeyLabel = AiSettings.maskedKey(context),
+                aiModel = AiSettings.model(context),
+                onOpenAiKeyDialog = { (context as? MainActivity)?.showAiKeyDialog() },
+                onTestAiKey = { (context as? MainActivity)?.testAiKey() },
+                onExportSessionReport = { withAi -> (context as? MainActivity)?.exportSessionReport(withAi) },
                 isFaceDownProtectionEnabled = faceDownProtectionEnabled,
                 onToggleFaceDownProtection = { enabled ->
                     AppLockPreferences.setFaceDownProtectionEnabled(context, enabled)

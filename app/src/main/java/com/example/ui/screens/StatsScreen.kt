@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -50,7 +51,8 @@ fun StatsScreen(
     intruderLogs: List<IntruderLog>,
     lockedAppCount: Int,
     totalAppCount: Int,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onExportReport: (String?, Boolean) -> Unit = { _, _ -> }
 ) {
     val dayFormat = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
     val labelFormat = SimpleDateFormat("EEEEE", Locale.KOREA)
@@ -178,6 +180,47 @@ fun StatsScreen(
                             Text(name, color = TextPrimary, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
                             Text("${count}회", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+            }
+        }
+
+        // 리포트 내보내기
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(OneUi.CardRadius))
+                    .background(OneUi.CardSurface)
+                    .padding(OneUi.CardPadding)
+            ) {
+                Text("리포트 내보내기", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "최근 7일 잠금 해제 기록을 이미지로 만듭니다. 기기 안의 기록만 쓰므로 API 비용이 없습니다.",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+                Spacer(Modifier.height(14.dp))
+                androidx.compose.material3.Button(
+                    onClick = { onExportReport(null, false) },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = OneUi.AccentTint,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("이미지 리포트 만들기", fontWeight = FontWeight.Bold) }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { onExportReport(null, true) },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Psychology, contentDescription = null, modifier = Modifier.size(16.dp), tint = OneUi.InfoTint)
+                        Spacer(Modifier.width(6.dp))
+                        Text("AI 요약 포함", fontSize = 12.sp, color = TextPrimary)
                     }
                 }
             }

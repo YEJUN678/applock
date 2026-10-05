@@ -602,6 +602,44 @@ fun AppearanceSectionScreen(state: SettingsUiState, actions: SettingsUiActions, 
 fun VaultSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBack: () -> Unit) {
     var clipboardSheet by remember { mutableStateOf(false) }
     SectionScaffold(SettingsSection.VAULT, onBack) {
+        item { SettingsSectionLabel("AI 설정") }
+        item {
+            SettingsCard(accent = OneUi.CardSurface) {
+                SettingsRow(
+                    icon = Icons.Default.Key,
+                    title = "AI 키 입력 · 변경",
+                    subtitle = if (state.aiKeyConfigured) {
+                        "현재 ${state.aiMaskedKey} · 모델 ${state.aiModelName}"
+                    } else {
+                        "아직 설정되지 않았습니다"
+                    },
+                    tint = if (state.aiKeyConfigured) OneUi.OkTint else OneUi.WarnTint,
+                    showChevron = true,
+                    onClick = actions.openAiKeyDialog
+                )
+                SettingsRow(
+                    icon = Icons.Default.Psychology,
+                    title = "AI 키 테스트",
+                    subtitle = "키가 실제로 통하는지 한 번 확인합니다",
+                    tint = OneUi.InfoTint,
+                    showChevron = state.aiKeyConfigured,
+                    enabled = state.aiKeyConfigured,
+                    onClick = actions.testAiKey
+                )
+                SettingsStatusBanner(
+                    tint = if (state.aiKeyConfigured) OneUi.OkTint else OneUi.DangerTint,
+                    title = if (state.aiKeyConfigured) "AI 기능을 쓸 수 있습니다" else "AI 키가 없습니다",
+                    description = if (state.aiKeyConfigured) {
+                        "증거 AI 분석, 알림 요약, 잠금 해제 리포트 요약이 이 키를 씁니다."
+                    } else {
+                        "키를 넣으면 증거 AI 분석과 알림 요약이 동작합니다. 키는 Keystore 로 암호화되어 기기 안에만 저장됩니다."
+                    },
+                    actionLabel = if (state.aiKeyConfigured) null else "지금 입력",
+                    onAction = actions.openAiKeyDialog
+                )
+            }
+        }
+
         item { SettingsSectionLabel("보관") }
         item {
             SettingsCard(accent = OneUi.CardSurface) {

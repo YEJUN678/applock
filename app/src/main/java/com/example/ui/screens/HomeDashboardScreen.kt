@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.InsertChart
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -41,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.LockConfig
+import com.example.model.IntruderLog
 import com.example.ui.theme.OneUi
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
@@ -68,6 +71,10 @@ fun HomeDashboardScreen(
     onOpenSettings: () -> Unit,
     onOpenLogs: () -> Unit,
     onOpenVault: () -> Unit,
+    onOpenStats: () -> Unit = {},
+    onOpenEvidenceAi: () -> Unit = {},
+    intruderLogs: List<IntruderLog> = emptyList(),
+    aiDailySummary: String = "",
     modifier: Modifier = Modifier
 ) {
     val requiredReady = hasAccessibilityPermission && hasOverlayPermission
@@ -80,6 +87,18 @@ fun HomeDashboardScreen(
 
     val todayCount = remember(sessionLog) { countToday(sessionLog) }
     val dayFormat = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
+    val todayKey = dayFormat.format(Date())
+    val intruderCountToday = remember(intruderLogs) {
+        intruderLogs.count { dayFormat.format(Date(it.timestamp)) == todayKey }
+    }
+    // 밤 11시 이후 해제는 사람이 아닌 타이밍일 가능성이 높다.
+    val lateNightCount = remember(sessionLog) {
+        sessionLog.count {
+            val cal = java.util.Calendar.getInstance().apply { timeInMillis = it.timestamp }
+            val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+            hour >= 23 || hour < 4
+        }
+    }
     val timeFormat = SimpleDateFormat("HH:mm", Locale.KOREA)
     val recent = sessionLog.take(5)
 
@@ -168,6 +187,71 @@ fun HomeDashboardScreen(
                 QuickAction("금고 열기", Icons.Default.Lock, OneUi.OkTint, Modifier.weight(1f), onOpenVault)
                 QuickAction("침입 기록", Icons.Default.Psychology, OneUi.DangerTint, Modifier.weight(1f), onOpenLogs)
                 QuickAction("설정", Icons.Default.Shield, OneUi.AccentTint, Modifier.weight(1f), onOpenSettings)
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(OneUi.CardSpacing), modifier = Modifier.fillMaxWidth()) {
+                QuickAction("통계", Icons.Default.InsertChart, OneUi.AccentTint, Modifier.weight(1f), onOpenStats)
+                QuickAction("증거 AI", Icons.Default.Psychology, OneUi.InfoTint, Modifier.weight(1f), onOpenEvidenceAi)
+                QuickAction("권한 도우미", Icons.Default.Shield, OneUi.OkTint, Modifier.weight(1f), onOpenPermissionWizard)
+            }
+        }
+
+        // 오늘의 요약 (AI 가 있으면 요약 줄이 추가된다)
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(OneUi.CardRadius))
+                    .background(OneUi.CardSurface)
+                    .padding(OneUi.CardPadding)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = OneUi.InfoTint, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("오늘의 요약", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = buildString {
+                        append("오늘 잠금을 ")
+                        append("${todayCount}번")
+                        append(if (lockedAppCount > 0) " 풀었고, " else " 풀었고, ")
+                        append("${lockedAppCount}개 앱이 보호 중입니다.")
+                        if (intruderCountToday > 0) {
+                            append("\n오늘 차단한 침입 시도가 ${intruderCountToday}건 있습니다.")
+                        } else {
+                            append("\n오늘은 침입 시도가 없습니다.")
+                        }
+                        if (lateNightCount > 0) {
+                            append("\n밤 11시 이후 해제가 ${lateNightCount}번 있었습니다.")
+                        }
+                    },
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp
+                )
+                if (aiDailySummary.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(OneUi.tintAlpha(OneUi.InfoTint, 0.14f))
+                            .padding(12.dp)
+                    ) {
+                        Icon(Icons.Default.Psychology, contentDescription = null, tint = OneUi.InfoTint, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(aiDailySummary, color = TextPrimary, fontSize = 12.sp, lineHeight = 18.sp)
+                    }
+                } else {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "AI 요약을 보려면 AI 키를 설정해 주세요. 아래는 기기 안 기록만으로 만든 내용입니다.",
+                        color = TextSecondary,
+                        fontSize = 11.sp
+                    )
+                }
             }
         }
 

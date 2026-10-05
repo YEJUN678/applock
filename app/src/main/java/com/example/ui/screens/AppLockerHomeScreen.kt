@@ -240,6 +240,11 @@ fun AppLockerHomeScreen(
     onRemoveBackground: (String) -> Unit = {},
     onToggleBackgroundAutoRotate: (Boolean) -> Unit = {},
     onCycleBackgroundRotateSeconds: () -> Unit = {},
+    aiKeyLabel: String = "설정되지 않음",
+    aiModel: String = "",
+    onOpenAiKeyDialog: () -> Unit = {},
+    onTestAiKey: () -> Unit = {},
+    onExportSessionReport: (Boolean) -> Unit = {},
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -856,7 +861,10 @@ fun AppLockerHomeScreen(
                                 onOpenPermissionWizard = { onOpenPermissionWizard() },
                                 onOpenSettings = { selectedTab = 3 },
                                 onOpenLogs = { selectedTab = 2 },
-                                onOpenVault = { onOpenVault() }
+                                onOpenVault = { onOpenVault() },
+                                onOpenStats = { selectedTab = 5 },
+                                onOpenEvidenceAi = { selectedTab = 6 },
+                                intruderLogs = intruderLogs
                             )
                         } else {
                             EmptyAppsView(title = "홈", desc = "사용할 수 없습니다.")
@@ -902,7 +910,8 @@ fun AppLockerHomeScreen(
                             intruderLogs = intruderLogs,
                             lockedAppCount = lockedApps.size,
                             totalAppCount = apps.size,
-                            onBack = { selectedTab = 1 }
+                            onBack = { selectedTab = 1 },
+                            onExportReport = { _, withAi -> onExportSessionReport(withAi) }
                         )
                     }
                     6 -> if (!isDuressMode) {
@@ -1015,6 +1024,10 @@ fun AppLockerHomeScreen(
                             onRemoveBackground = onRemoveBackground,
                             onToggleBackgroundAutoRotate = onToggleBackgroundAutoRotate,
                             onCycleBackgroundRotateSeconds = onCycleBackgroundRotateSeconds,
+                            aiKeyLabel = aiKeyLabel,
+                            aiModel = aiModel,
+                            onOpenAiKeyDialog = onOpenAiKeyDialog,
+                            onTestAiKey = onTestAiKey,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
@@ -1233,7 +1246,11 @@ fun SettingsView(
     onAddBackgroundToGallery: () -> Unit = {},
     onRemoveBackground: (String) -> Unit = {},
     onToggleBackgroundAutoRotate: (Boolean) -> Unit = {},
-    onCycleBackgroundRotateSeconds: () -> Unit = {}
+    onCycleBackgroundRotateSeconds: () -> Unit = {},
+    aiKeyLabel: String = "설정되지 않음",
+    aiModel: String = "",
+    onOpenAiKeyDialog: () -> Unit = {},
+    onTestAiKey: () -> Unit = {}
 ) {
     val state = SettingsUiState(
         lockConfig = lockConfig,
@@ -1257,7 +1274,9 @@ fun SettingsView(
         aiKeyConfigured = aiKeyConfigured,
         lockBackgroundGallery = lockConfig.lockBackgroundUris,
         lockBackgroundAutoRotate = lockConfig.lockBackgroundAutoRotate,
-        lockBackgroundRotateSeconds = lockConfig.lockBackgroundRotateSeconds
+        lockBackgroundRotateSeconds = lockConfig.lockBackgroundRotateSeconds,
+        aiMaskedKey = aiKeyLabel,
+        aiModelName = aiModel
     )
 
     val actions = SettingsUiActions(
@@ -1273,6 +1292,8 @@ fun SettingsView(
         removeBackground = onRemoveBackground,
         toggleBackgroundAutoRotate = onToggleBackgroundAutoRotate,
         cycleBackgroundRotateSeconds = onCycleBackgroundRotateSeconds,
+        openAiKeyDialog = onOpenAiKeyDialog,
+        testAiKey = onTestAiKey,
         toggleAppSelfProtect = onToggleAppSelfProtect,
         toggleUninstallProtection = onToggleUninstallProtection,
         toggleScreenOffLock = onToggleScreenOffLock,
