@@ -98,7 +98,9 @@ data class SettingsUiState(
     val lockBackgroundAutoRotate: Boolean = false,
     val lockBackgroundRotateSeconds: Int = 30,
     val aiMaskedKey: String = "설정되지 않음",
-    val aiModelName: String = ""
+    val aiModelName: String = "",
+    val screenBlockAppCount: Int = 0,
+    val screenBlockCount: Int = 0
 )
 
 /** 설정 화면에서 쓰는 색상 열거형 별칭(UI 층이 util 타입을 직접 다루지 않도록 한다). */
@@ -120,6 +122,7 @@ data class SettingsUiActions(
     val cycleBackgroundRotateSeconds: () -> Unit = {},
     val openAiKeyDialog: () -> Unit = {},
     val testAiKey: () -> Unit = {},
+    val openScreenBlockManager: () -> Unit = {},
     val toggleAppSelfProtect: (Boolean) -> Unit = {},
     val toggleUninstallProtection: (Boolean) -> Unit = {},
     val toggleScreenOffLock: (Boolean) -> Unit = {},
@@ -290,6 +293,7 @@ private val SEARCH_INDEX = listOf(
     SettingEntry(SettingsSection.APPEARANCE, "비상 연락처", "잠금 화면 연락처"),
     SettingEntry(SettingsSection.VAULT, "AI 키 입력", "ai 키 gemini apikey 입력 변경", "AI 키를 입력하거나 교체합니다"),
     SettingEntry(SettingsSection.VAULT, "AI 키 테스트", "ai 키 확인 점검", "키가 실제로 통하는지 점검"),
+    SettingEntry(SettingsSection.VAULT, "앱 안 특정 화면만 잠그기", "자세히 막기 화면 chatroom 프래그먼트 activity", "앱 안에서 특정 화면만 잠급니다"),
     SettingEntry(SettingsSection.VAULT, "파일 금고", "암호화 보관함"),
     SettingEntry(SettingsSection.VAULT, "보안 메모", "aes 메모"),
     SettingEntry(SettingsSection.VAULT, "암호화 백업", "백업 복원"),

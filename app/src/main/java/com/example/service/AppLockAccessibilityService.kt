@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityManager
 import com.example.LockActivity
 import com.example.util.AppLockPermissionHelper
 import com.example.util.AppLockPreferences
+import com.example.util.ScreenBlockStore
 
 class AppLockAccessibilityService : AccessibilityService() {
 
@@ -61,6 +62,7 @@ class AppLockAccessibilityService : AccessibilityService() {
 
     private var lastForegroundPackage: String = ""
     private var lastEventTime: Long = 0L
+    private var lastScreenBlockAt: Long = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -184,6 +186,50 @@ class AppLockAccessibilityService : AccessibilityService() {
                 // Keep the active session alive while interacting
                 AppLockPreferences.touchTemporarilyUnlocked(packageName)
             }
+            return
+        }
+
+        // 앱은 열어두고 특정 화면만 막기.
+        // 사용자가 실제로 본 화면만 기록되므로 여기 보이는 항목은 전부 실측된 것이다.
+        val className = event.className?.toString().orEmpty()
+        if (className.isNotBlank()) {
+            val appLabel = runCatching {
+                val pm = applicationContext.packageManager
+                pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+            }.getOrDefault(packageName)
+            ScreenBlockStore.record(applicationContext, packageName, appLabel, className, readWindowTitle())
+
+            val hit = ScreenBlockStore.isBlocked(applicationContext, packageName, className, readWindowTitle())
+            if (hit != null) {
+                // 시도가 잦으면 잠금 화면이 연속으로 뜨지 않게 아주 짧게만 쿨다운을 둔다.
+                if (now - lastScreenBlockAt > 1500L) {
+                    lastScreenBlockAt = now
+                    recordScreenBlockAttempt(packageName, hit.displayName)
+                    LockActivity.start(applicationContext, packageName)
+                }
+            }
+        }
+    }
+
+    /** 막힌 화면 진입 시도를 잠금 화면에 전달한다(증거 기록용). */
+    private fun recordScreenBlockAttempt(packageName: String, screenName: String) {
+        val prefs = getSharedPreferences("screen_block_attempt", MODE_PRIVATE)
+        prefs.edit()
+            .putString("pkg", packageName)
+            .putString("screen", screenName)
+            .putLong("at", System.currentTimeMillis())
+            .apply()
+    }
+
+    /** 화면 최상단 바에 보이는 제목을 읽는다(채팅방 이름 같은 구분자). */
+    private fun readWindowTitle(): String {
+        return try {
+            windows?.firstNotNullOfOrNull { window ->
+                window.root?.findAccessibilityNodeInfosByViewId("android:id/title")?.firstOrNull()?.text?.toString()
+                    ?: window.root?.findAccessibilityNodeInfosByViewId("android:id/action_bar_title")?.firstOrNull()?.text?.toString()
+            }.orEmpty().take(80)
+        } catch (_: Exception) {
+            ""
         }
     }
 

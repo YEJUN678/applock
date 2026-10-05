@@ -74,6 +74,7 @@ import com.example.util.LostModeManager
 import com.example.util.AiSettings
 import com.example.util.GeminiClient
 import com.example.util.SessionReportRenderer
+import com.example.util.ScreenBlockStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -90,6 +91,14 @@ class MainActivity : FragmentActivity() {
     private var isUpdateDownloading by mutableStateOf(false)
     private var updateDownloadProgress by mutableStateOf<Int?>(null)
     private var downloadedUpdateUri by mutableStateOf<Uri?>(null)
+
+    // "자세히 막기" 관리 화면을 띄울지 여부
+    private var showScreenBlockManager by mutableStateOf(false)
+
+    /** 설정 화면에서 "자세히 막기"를 눌렀을 때 호출한다. */
+    fun openScreenBlockManager() {
+        showScreenBlockManager = true
+    }
     private var pendingInstallerUri: Uri? = null
     private var incomingSharedUri by mutableStateOf<Uri?>(null)
     private var pendingLostModePackages: List<String>? = null
@@ -562,6 +571,11 @@ class MainActivity : FragmentActivity() {
                     onBackUp = { showBackupActions() },
                     onInstall = { uri -> launchPackageInstaller(uri) }
                 )
+                if (showScreenBlockManager) {
+                    com.example.ui.screens.settings.ScreenBlockManagerScreen(
+                        onBack = { showScreenBlockManager = false }
+                    )
+                }
             }
         }
         if (!getSharedPreferences("backup_ui", MODE_PRIVATE).getBoolean("tutorial_seen", false)) showBackupTutorial()
@@ -1195,6 +1209,9 @@ fun AppLockerApp(
                 aiModel = AiSettings.model(context),
                 onOpenAiKeyDialog = { (context as? MainActivity)?.showAiKeyDialog() },
                 onTestAiKey = { (context as? MainActivity)?.testAiKey() },
+                screenBlockAppCount = ScreenBlockStore.appsWithScreens(context).size,
+                screenBlockCount = ScreenBlockStore.blockedCount(context),
+                openScreenBlockManager = { (context as? MainActivity)?.openScreenBlockManager() },
                 onExportSessionReport = { withAi -> (context as? MainActivity)?.exportSessionReport(withAi) },
                 isFaceDownProtectionEnabled = faceDownProtectionEnabled,
                 onToggleFaceDownProtection = { enabled ->

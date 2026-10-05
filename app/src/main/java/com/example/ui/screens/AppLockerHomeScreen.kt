@@ -244,6 +244,9 @@ fun AppLockerHomeScreen(
     aiModel: String = "",
     onOpenAiKeyDialog: () -> Unit = {},
     onTestAiKey: () -> Unit = {},
+    screenBlockAppCount: Int = 0,
+    screenBlockCount: Int = 0,
+    openScreenBlockManager: () -> Unit = {},
     onExportSessionReport: (Boolean) -> Unit = {},
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
@@ -1028,6 +1031,9 @@ fun AppLockerHomeScreen(
                             aiModel = aiModel,
                             onOpenAiKeyDialog = onOpenAiKeyDialog,
                             onTestAiKey = onTestAiKey,
+                            screenBlockAppCount = screenBlockAppCount,
+                            screenBlockCount = screenBlockCount,
+                            openScreenBlockManager = openScreenBlockManager,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
@@ -1250,7 +1256,10 @@ fun SettingsView(
     aiKeyLabel: String = "설정되지 않음",
     aiModel: String = "",
     onOpenAiKeyDialog: () -> Unit = {},
-    onTestAiKey: () -> Unit = {}
+    onTestAiKey: () -> Unit = {},
+    screenBlockAppCount: Int = 0,
+    screenBlockCount: Int = 0,
+    openScreenBlockManager: () -> Unit = {}
 ) {
     val state = SettingsUiState(
         lockConfig = lockConfig,
@@ -1276,7 +1285,9 @@ fun SettingsView(
         lockBackgroundAutoRotate = lockConfig.lockBackgroundAutoRotate,
         lockBackgroundRotateSeconds = lockConfig.lockBackgroundRotateSeconds,
         aiMaskedKey = aiKeyLabel,
-        aiModelName = aiModel
+        aiModelName = aiModel,
+        screenBlockAppCount = screenBlockAppCount,
+        screenBlockCount = screenBlockCount
     )
 
     val actions = SettingsUiActions(
@@ -1294,6 +1305,7 @@ fun SettingsView(
         cycleBackgroundRotateSeconds = onCycleBackgroundRotateSeconds,
         openAiKeyDialog = onOpenAiKeyDialog,
         testAiKey = onTestAiKey,
+        openScreenBlockManager = openScreenBlockManager,
         toggleAppSelfProtect = onToggleAppSelfProtect,
         toggleUninstallProtection = onToggleUninstallProtection,
         toggleScreenOffLock = onToggleScreenOffLock,

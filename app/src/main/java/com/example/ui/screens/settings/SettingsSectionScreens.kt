@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
@@ -602,6 +603,23 @@ fun AppearanceSectionScreen(state: SettingsUiState, actions: SettingsUiActions, 
 fun VaultSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBack: () -> Unit) {
     var clipboardSheet by remember { mutableStateOf(false) }
     SectionScaffold(SettingsSection.VAULT, onBack) {
+        item { SettingsSectionLabel("자세히 막기") }
+        item {
+            SettingsCard(accent = OneUi.CardSurface) {
+                SettingsRow(
+                    icon = Icons.Default.ViewCarousel,
+                    title = "앱 안 특정 화면만 잠그기",
+                    subtitle = if (state.screenBlockAppCount == 0) {
+                        "아직 기록된 화면이 없습니다"
+                    } else {
+                        "${state.screenBlockAppCount}개 앱 · ${state.screenBlockCount}개 화면 잠금"
+                    },
+                    tint = OneUi.InfoTint,
+                    showChevron = true,
+                    onClick = actions.openScreenBlockManager
+                )
+            }
+        }
         item { SettingsSectionLabel("AI 설정") }
         item {
             SettingsCard(accent = OneUi.CardSurface) {
