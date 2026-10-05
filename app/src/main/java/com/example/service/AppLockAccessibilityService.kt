@@ -98,6 +98,11 @@ class AppLockAccessibilityService : AccessibilityService() {
             return
         }
 
+        // 화면 기록은 모든 잠금 판정보다 먼저 한다.
+        // 잠긴 앱은 아래에서 LockActivity 를 띄우고 return 하므로, 기록이 그 뒤에 있으면
+        // 잠긴 앱(카톡 등)은 영원히 기록되지 않는다. 그래서 여기서 먼저 기록한다.
+        recordScreenIfNeeded(event.packageName?.toString().orEmpty(), event)
+
         // CRITICAL FOR POP-UP VIEW & MULTI-WINDOW:
         // Inspect all interactive windows currently displayed (covers Samsung Pop-up View, Freeform, Split Screen)
         try {
@@ -157,10 +162,6 @@ class AppLockAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 화면 기록은 다른 판단보다 먼저 한다.
-        // 아래 데바운스/잠금 판정에 걸려 반환되면 기록이 사라지므로, 위치가 늦으면 아무것도 안 쌓인다.
-        recordScreenIfNeeded(packageName, event)
-
         // Debounce frequent content changes for same package
         if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             if (packageName == lastForegroundPackage && now - lastEventTime < 250L) {
@@ -218,6 +219,7 @@ class AppLockAccessibilityService : AccessibilityService() {
      * 같은 화면을 계속 쌓지 않게 약간의 간격을 두지만, 목록이 비면 쓸모가 없으므로 간격은 짧게 둔다.
      */
     private fun recordScreenIfNeeded(packageName: String, event: AccessibilityEvent) {
+        if (packageName.isBlank()) return
         // 잠긴 앱도 기록한다. 나중에 "앱 전체 잠금"을 풀면 여기 잡힌 화면을 그대로 쓸 수 있다.
         if (packageName == applicationContext.packageName) return
         if (packageName == "com.android.systemui" || packageName == "android") return
