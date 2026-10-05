@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.LockAccent
 import com.example.model.LockClockPosition
+import com.example.model.LockChargingStyle
 import com.example.model.LockClockStyle
 import com.example.model.LockConfig
 import com.example.model.LockFontStyle
@@ -76,6 +77,7 @@ fun LockScreenEditor(
     var clockPosition by remember { mutableStateOf(config.lockClockPosition) }
     var iconShape by remember { mutableStateOf(config.lockIconShape) }
     var fontStyle by remember { mutableStateOf(config.lockFontStyle) }
+    var chargingStyle by remember { mutableStateOf(config.lockChargingStyle) }
     var accent by remember { mutableStateOf(config.lockAccent) }
     var quickActions by remember { mutableStateOf(config.isLockQuickActionsEnabled) }
 
@@ -239,6 +241,34 @@ fun LockScreenEditor(
                     }
                 }
 
+                Text("충전 애니메이션", color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text("기기를 충전할 때만 잠금 화면에서 나타납니다.", color = TextSecondary, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    LockChargingStyle.entries.forEach { item ->
+                        FilterChip(
+                            selected = chargingStyle == item,
+                            onClick = { chargingStyle = item },
+                            label = { Text(item.title, fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = accentColor, selectedLabelColor = Color.Black)
+                        )
+                    }
+                }
+                if (chargingStyle != LockChargingStyle.NONE) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF0B1220)).padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // 편집기 안에서는 항상 보인다고 가정해 미리보기를 보여 준다.
+                        ChargingIndicator(
+                            style = chargingStyle,
+                            state = ChargingState(isCharging = true, levelPercent = 68, isFull = false),
+                            modifier = Modifier.fillMaxWidth(),
+                            accent = accentColor
+                        )
+                    }
+                }
+
                 Text("강조색", color = TextPrimary, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     LockAccent.entries.forEach { item ->
@@ -302,6 +332,7 @@ fun LockScreenEditor(
                             lockClockPosition = clockPosition,
                             lockIconShape = iconShape,
                             lockFontStyle = fontStyle,
+                            lockChargingStyle = chargingStyle,
                             lockAccent = accent,
                             isLockQuickActionsEnabled = quickActions
                         )

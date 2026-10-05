@@ -23,6 +23,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +39,9 @@ import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.EnhancedEncryption
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.InsertChart
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
@@ -116,7 +122,12 @@ import android.widget.Toast
 import android.widget.VideoView
 import android.widget.MediaController
 import android.net.Uri
+import com.example.ui.components.AppGridCard
 import com.example.ui.components.AppItemCard
+import com.example.ui.components.AppListControlBar
+import com.example.ui.components.AppSortOrder
+import com.example.ui.components.AppViewMode
+import com.example.ui.components.applyListOptions
 import com.example.ui.components.BatchTimeoutDialog
 import com.example.ui.components.ChangeCalculatorCodeModal
 import com.example.ui.components.ChangeKnockCodeModal
@@ -129,6 +140,9 @@ import com.example.ui.components.FailedAttemptLimitCard
 import com.example.ui.components.NxNPatternLockView
 import com.example.ui.components.SecurityMetric
 import com.example.ui.components.SessionTimelineCard
+import com.example.ui.screens.settings.SettingsRouter
+import com.example.ui.screens.settings.SettingsUiActions
+import com.example.ui.screens.settings.SettingsUiState
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Checklist
@@ -217,8 +231,12 @@ fun AppLockerHomeScreen(
     modifier: Modifier = Modifier
 ) {
     val appContext = LocalContext.current
-    var selectedTab by remember { mutableIntStateOf(1) } // 0: Locked, 1: Unlocked, 2: Intruder Selfie, 3: Settings
+    var selectedTab by remember { mutableIntStateOf(1) } // 0: 잠긴 앱, 1: 설치된 앱, 2: 침입 기록, 3: 설정, 4: 홈 대시보드
     var searchQuery by remember { mutableStateOf("") }
+    var appViewMode by remember { mutableStateOf(AppViewMode.LIST) }
+    var appSortOrder by remember { mutableStateOf(AppSortOrder.NAME_ASC) }
+    var appCategoryFilter by remember { mutableStateOf<String?>(null) }
+    var showStatsScreen by remember { mutableStateOf(false) }
     var showSetPatternSheet by remember { mutableStateOf(false) }
     var showSetPinSheet by remember { mutableStateOf(false) }
     var showSetPasswordSheet by remember { mutableStateOf(false) }
@@ -239,6 +257,15 @@ fun AppLockerHomeScreen(
     }
     val lockedApps = remember(filteredApps) { filteredApps.filter { it.isLocked } }
     val unlockedApps = remember(filteredApps) { filteredApps.filter { !it.isLocked } }
+    // 정렬 · 카테고리 필터를 적용한 실제 표시 목록
+    val optionsApplied = remember(filteredApps, appSortOrder, appCategoryFilter) {
+        filteredApps.applyListOptions(appSortOrder, appCategoryFilter)
+    }
+    val visibleLockedApps = remember(optionsApplied) { optionsApplied.filter { it.isLocked } }
+    val visibleUnlockedApps = remember(optionsApplied) { optionsApplied.filter { !it.isLocked } }
+    val appCategories = remember(filteredApps) {
+        (listOf("설치된 앱") + filteredApps.map { it.category }.distinct()).take(6)
+    }
 
     Column(
         modifier = modifier
@@ -299,6 +326,9 @@ fun AppLockerHomeScreen(
                                     border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f))
                                 ) {
                                     Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 4 }) { Icon(Icons.Default.Home, "홈 대시보드", tint = NeonGreen) }
+                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 5 }) { Icon(Icons.Default.InsertChart, "통계", tint = NeonCyan) }
+                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 6 }) { Icon(Icons.Default.Psychology, "증거 AI 분석", tint = NeonPurple) }
                                         IconButton(onClick = { showMoreMenu = false; onOpenVault() }) { Icon(Icons.Default.EnhancedEncryption, "금고", tint = NeonGreen) }
                                         IconButton(onClick = { showMoreMenu = false; onOpenSecureNotes() }) { Icon(Icons.Default.EnhancedEncryption, "보안 메모", tint = NeonPurple) }
                                         IconButton(onClick = { showMoreMenu = false; onTogglePrivacyFilter() }) { Icon(Icons.Default.VisibilityOff, "사생활 필름", tint = NeonAmber) }
@@ -587,6 +617,7 @@ fun AppLockerHomeScreen(
                     .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
                 if (!isSelectionMode) {
+                    Column {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -596,6 +627,7 @@ fun AppLockerHomeScreen(
                     ) {
                         Text(
                             text = if (selectedTab == 0) "🔒 잠긴 앱 (${lockedApps.size}개)" else "📱 설치된 앱 (${unlockedApps.size}개)",
+                            maxLines = 1,
                             color = TextSecondary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
@@ -618,6 +650,22 @@ fun AppLockerHomeScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("다중 선택 모드", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+                    // 보기 방식 · 정렬 · 카테고리 필터
+                    if (selectedTab == 0 || selectedTab == 1) {
+                        AppListControlBar(
+                            title = if (selectedTab == 0) "잠긴 앱" else "설치된 앱",
+                            count = if (selectedTab == 0) visibleLockedApps.size else visibleUnlockedApps.size,
+                            viewMode = appViewMode,
+                            onViewModeChange = { appViewMode = it },
+                            sortOrder = appSortOrder,
+                            onSortOrderChange = { appSortOrder = it },
+                            categories = appCategories,
+                            selectedCategory = appCategoryFilter,
+                            onCategoryChange = { appCategoryFilter = it },
+                            onBatchSelect = { isSelectionMode = true; selectedPackages = emptySet() }
+                        )
+                    }
                     }
                 } else {
                     Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
@@ -734,74 +782,71 @@ fun AppLockerHomeScreen(
                 }
             } else {
                 when (selectedTab) {
-                    0 -> {
-                        if (lockedApps.isEmpty()) {
-                            EmptyAppsView(
-                                title = "잠긴 앱이 없습니다",
-                                desc = "'전체/안 잠긴 앱' 탭에서 잠그고 싶은 앱의 스위치를 켜거나, '전체 잠금'을 눌러보세요."
+                    4 -> {
+                        if (!isDuressMode) {
+                            HomeDashboardScreen(
+                                lockConfig = lockConfig,
+                                lockedAppCount = lockedApps.size,
+                                totalAppCount = apps.size,
+                                hasAccessibilityPermission = hasAccessibilityPermission,
+                                hasOverlayPermission = hasOverlayPermission,
+                                hasUsageStatsPermission = hasUsageStatsPermission,
+                                sessionLog = sessionLog,
+                                isLostModeActive = isLostModeActive,
+                                onOpenPermissionWizard = { onOpenPermissionWizard() },
+                                onOpenSettings = { selectedTab = 3 },
+                                onOpenLogs = { selectedTab = 2 },
+                                onOpenVault = { onOpenVault() }
                             )
                         } else {
-                            LazyColumn(
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(lockedApps, key = { it.id }) { app ->
-                                    AppItemCard(
-                                        app = app,
-                                        isSelectionMode = isSelectionMode,
-                                        isSelected = selectedPackages.contains(app.packageName),
-                                        onSelectToggle = {
-                                            selectedPackages = if (selectedPackages.contains(app.packageName)) {
-                                                selectedPackages - app.packageName
-                                            } else {
-                                                selectedPackages + app.packageName
-                                            }
-                                        },
-                                        onToggleLock = { onToggleLock(app.packageName, it) },
-                                        onTestLaunch = { onTestLaunchApp(app) }
-                                    )
-                                }
-                            }
+                            EmptyAppsView(title = "홈", desc = "사용할 수 없습니다.")
                         }
                     }
+                    0 -> {
+                        AppListBody(
+                            apps = visibleLockedApps,
+                            isEmpty = lockedApps.isEmpty(),
+                            emptyTitle = "잠긴 앱이 없습니다",
+                            emptyDesc = "'설치된 앱'에서 잠그고 싶은 앱을 선택하거나, '전체 잠금'을 눌러보세요.",
+                            viewMode = appViewMode,
+                            isSelectionMode = isSelectionMode,
+                            selectedPackages = selectedPackages,
+                            onSelectToggle = { pkg ->
+                                selectedPackages = if (selectedPackages.contains(pkg)) selectedPackages - pkg else selectedPackages + pkg
+                            },
+                            onToggleLock = onToggleLock,
+                            onTestLaunch = onTestLaunchApp
+                        )
+                    }
                     1 -> {
-                        if (unlockedApps.isEmpty()) {
-                            if (searchQuery.isNotEmpty()) {
-                                EmptyAppsView(
-                                    title = "'$searchQuery' 검색 결과 없음",
-                                    desc = "해당 키워드와 일치하는 설치 앱이 없습니다."
-                                )
-                            } else {
-                                EmptyAppsView(
-                                    title = "표시할 앱이 없습니다",
-                                    desc = "설치된 모든 앱이 잠겨 있거나 목록을 불러오지 못했습니다. 상단 새로고침을 눌러보세요."
-                                )
-                            }
-                        } else {
-                            LazyColumn(
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(unlockedApps, key = { it.id }) { app ->
-                                    AppItemCard(
-                                        app = app,
-                                        isSelectionMode = isSelectionMode,
-                                        isSelected = selectedPackages.contains(app.packageName),
-                                        onSelectToggle = {
-                                            selectedPackages = if (selectedPackages.contains(app.packageName)) {
-                                                selectedPackages - app.packageName
-                                            } else {
-                                                selectedPackages + app.packageName
-                                            }
-                                        },
-                                        onToggleLock = { onToggleLock(app.packageName, it) },
-                                        onTestLaunch = { onTestLaunchApp(app) }
-                                    )
-                                }
-                            }
-                        }
+                        AppListBody(
+                            apps = visibleUnlockedApps,
+                            isEmpty = unlockedApps.isEmpty(),
+                            emptyTitle = if (searchQuery.isNotEmpty()) "'$searchQuery' 검색 결과 없음" else "표시할 앱이 없습니다",
+                            emptyDesc = if (searchQuery.isNotEmpty()) "해당 키워드와 일치하는 설치 앱이 없습니다."
+                            else "설치된 모든 앱이 잠겨 있거나 목록을 불러오지 못했습니다. 상단 새로고침을 눌러보세요.",
+                            viewMode = appViewMode,
+                            isSelectionMode = isSelectionMode,
+                            selectedPackages = selectedPackages,
+                            onSelectToggle = { pkg ->
+                                selectedPackages = if (selectedPackages.contains(pkg)) selectedPackages - pkg else selectedPackages + pkg
+                            },
+                            onToggleLock = onToggleLock,
+                            onTestLaunch = onTestLaunchApp
+                        )
+                    }
+                    5 -> if (!isDuressMode) {
+                        StatsScreen(
+                            lockConfig = lockConfig,
+                            sessionLog = sessionLog,
+                            intruderLogs = intruderLogs,
+                            lockedAppCount = lockedApps.size,
+                            totalAppCount = apps.size,
+                            onBack = { selectedTab = 1 }
+                        )
+                    }
+                    6 -> if (!isDuressMode) {
+                        EvidenceAiScreen(logs = intruderLogs, onBack = { selectedTab = 2 })
                     }
                     2 -> if (!isDuressMode) {
                         IntruderSelfieVaultView(
@@ -1108,1416 +1153,148 @@ fun SettingsView(
     onToggleIntruderSiren: (Boolean) -> Unit = {},
     onTogglePanicShake: (Boolean) -> Unit = {}
 ) {
-    var settingSearchQuery by remember { mutableStateOf("") }
-    val settingNames = remember {
-        listOf("AI 가드 이상 행동 감지", "음성 기록", "침입자 사진 및 영상", "생체 인식", "PIN 키패드", "잠금 방식", "재잠금 시간", "가짜 오류 화면", "위장 아이콘", "사생활 필름", "Lost Mode", "앱 자체 보호", "알림 숨김", "화면 꺼짐 잠금", "백업 및 복원")
+    val state = SettingsUiState(
+        lockConfig = lockConfig,
+        lockedAppCount = lockedAppCount,
+        hasAccessibilityPermission = hasAccessibilityPermission,
+        hasOverlayPermission = hasOverlayPermission,
+        hasUsageStatsPermission = hasUsageStatsPermission,
+        isLostModeActive = isLostModeActive,
+        maxFailedAttempts = maxFailedAttempts,
+        lockoutMinutes = lockoutMinutes,
+        clipboardAutoClearEnabled = clipboardAutoClearEnabled,
+        clipboardClearSeconds = clipboardClearSeconds,
+        isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
+        recoveryConfigured = recoveryConfigured,
+        recoveryKeyConfigured = recoveryKeyConfigured,
+        recoveryKeyFailedAttempts = recoveryKeyFailedAttempts,
+        sessionCount = sessionLog.size
+    )
+
+    val actions = SettingsUiActions(
+        requestAccessibility = onRequestAccessibilityPermission,
+        requestOverlay = onRequestOverlayPermission,
+        requestUsageStats = onRequestUsageStatsPermission,
+        openPermissionWizard = onOpenPermissionWizard,
+        toggleNotificationPrivacy = onToggleNotificationPrivacy,
+        toggleAppSelfProtect = onToggleAppSelfProtect,
+        toggleUninstallProtection = onToggleUninstallProtection,
+        toggleScreenOffLock = onToggleScreenOffLock,
+        toggleFaceDownProtection = onToggleFaceDownProtection,
+        toggleLostMode = { if (isLostModeActive) onDisableLostMode() else onActivateLostMode() },
+        openLostModeMap = onOpenLostModeMap,
+        changeLockType = onChangeLockType,
+        changePattern = onChangePattern,
+        changePin = onChangePin,
+        changePassword = onChangePassword,
+        changeCalculatorCode = onChangeCalculatorCode,
+        changeKnockCode = onChangeKnockCode,
+        changeTimeout = onChangeLockTimeout,
+        changeSchedule = { enabled, startHour, startMinute, endHour, endMinute ->
+            onUpdateConfig(
+                lockConfig.copy(
+                    isScheduleLockEnabled = enabled,
+                    scheduleStartHour = startHour,
+                    scheduleStartMinute = startMinute,
+                    scheduleEndHour = endHour,
+                    scheduleEndMinute = endMinute
+                )
+            )
+        },
+        toggleBiometric = onToggleBiometric,
+        toggleStealthPattern = onToggleStealthPattern,
+        toggleRandomPin = onToggleRandomPin,
+        toggleVibration = onToggleVibration,
+        changeMaxFailedAttempts = onChangeMaxFailedAttempts,
+        changeLockoutMinutes = onChangeLockoutMinutes,
+        openAppSchedules = onOpenAppSchedules,
+        openExcludedApps = onOpenExcludedApps,
+        openRecoveryQuestions = onOpenRecoverySetup,
+        openRecoveryKey = onOpenRecoveryKeySetup,
+        editLockStyle = onEditLockStyle,
+        changeBackgroundTheme = onChangeTheme,
+        pickCustomLockBackground = onPickCustomLockBackground,
+        togglePrivacyFilter = onTogglePrivacyFilter,
+        configureEmergencyContact = onConfigureEmergencyContact,
+        openVault = onOpenVault,
+        openSecureNotes = onOpenSecureNotes,
+        manageBackup = onManageBackup,
+        showRecoveryQr = onShowRecoveryQr,
+        scanRecoveryQr = onScanRecoveryQr,
+        toggleClipboardAutoClear = onToggleClipboardAutoClear,
+        changeClipboardSeconds = onChangeClipboardClearSeconds,
+        clearSessionLog = onClearSessionLog,
+        showSessionLog = { },
+        configureDisguise = onConfigureDisguise,
+        toggleFakeCrash = onToggleFakeCrash,
+        configureFakeScreen = onConfigureFakeScreen,
+        configureDuressPin = onConfigureDuressPin,
+        toggleAiGuard = onToggleAiGuard,
+        changeAiGuardSensitivity = onChangeAiGuardSensitivity,
+        changeAiGuardFallback = onChangeAiGuardFallback,
+        toggleAiGuardVoice = onToggleAiGuardVoiceRecording,
+        resetAiGuardLearning = onResetAiGuardLearning,
+        toggleIntruderSelfie = onToggleIntruderSelfie,
+        changeIntruderThreshold = onChangeIntruderSelfieThreshold,
+        toggleIntruderSiren = onToggleIntruderSiren,
+        togglePanicShake = onTogglePanicShake,
+        checkForUpdates = onCheckForUpdates
+    )
+
+    SettingsRouter(state = state, actions = actions)
+}
+
+/** 잠긴 앱 / 설치된 앱 탭이 공유하는 목록 본문. 리스트·그리드 전환을 여기서 처리한다. */
+@Composable
+private fun AppListBody(
+    apps: List<AppItem>,
+    isEmpty: Boolean,
+    emptyTitle: String,
+    emptyDesc: String,
+    viewMode: AppViewMode,
+    isSelectionMode: Boolean,
+    selectedPackages: Set<String>,
+    onSelectToggle: (String) -> Unit,
+    onToggleLock: (String, Boolean) -> Unit,
+    onTestLaunch: (AppItem) -> Unit
+) {
+    if (isEmpty) {
+        EmptyAppsView(title = emptyTitle, desc = emptyDesc)
+        return
     }
-    LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        item {
-            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = CyberSurfaceDark), border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp)) {
-                    Text("설정 찾기", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = settingSearchQuery, onValueChange = { settingSearchQuery = it }, singleLine = true, placeholder = { Text("예: AI, 영상, 잠금, 위장") }, leadingIcon = { Icon(Icons.Default.Search, null, tint = NeonCyan) }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonCyan, unfocusedBorderColor = CyberBorder, focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary), modifier = Modifier.fillMaxWidth())
-                    if (settingSearchQuery.isNotBlank()) {
-                        val matches = settingNames.filter { it.contains(settingSearchQuery, ignoreCase = true) }
-                        Text(if (matches.isEmpty()) "일치하는 설정이 없습니다" else "결과: ${matches.joinToString(" · ")}", color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-                    }
-                }
-            }
-        }
-        item {
-            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = CyberCardDark), border = androidx.compose.foundation.BorderStroke(1.dp, if (isLostModeActive) NeonRed else CyberBorder), modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(if (isLostModeActive) "LOST MODE 활성화됨" else "Lost Mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = if (isLostModeActive) NeonRed else TextPrimary)
-                    Text("활성화하면 모든 관리 앱을 즉시 잠그고, 권한이 허용된 현재 위치와 전면 카메라 스냅샷을 기기에만 기록합니다.", color = TextSecondary, fontSize = 12.sp)
-                    Button(onClick = if (isLostModeActive) onDisableLostMode else onActivateLostMode, colors = ButtonDefaults.buttonColors(containerColor = if (isLostModeActive) NeonRed else NeonAmber, contentColor = Color.Black), modifier = Modifier.fillMaxWidth()) {
-                        Text(if (isLostModeActive) "Lost Mode 해제" else "Lost Mode 즉시 활성화", fontWeight = FontWeight.Bold)
-                    }
-                    OutlinedButton(onClick = onOpenLostModeMap, modifier = Modifier.fillMaxWidth()) { Text("최근 Lost Mode 위치를 지도에서 열기") }
-                }
-            }
-        }
-
-        // Redesigned security dashboard: surface the three facts users need before
-        // opening individual settings cards.
-        item {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberSurfaceDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.55f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Security, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(30.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("보안 제어 센터", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
-                            Text("현재 보호 상태를 빠르게 확인하세요", color = TextSecondary, fontSize = 12.sp)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        SecurityMetric("보호 앱", "${lockedAppCount}개", NeonCyan, Modifier.weight(1f))
-                        SecurityMetric("인증", lockConfig.lockType.title, NeonPurple, Modifier.weight(1f))
-                        SecurityMetric("긴급 흔들기", if (lockConfig.isPanicShakeEnabled) "강도 ${lockConfig.panicShakeStrength}" else "꺼짐", NeonAmber, Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-
-        // 0. Restricted Settings Guide (Android 13/14+)
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = NeonAmber
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "내 폰에서 접근성이 안 켜질 때 (해결 가이드)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "안드로이드 13/14+ 기기에서는 보안 정책상 다운로드된 앱의 접근성이 기본 차단('제한된 설정')됩니다.\n\n해결 방법:\n1. 아래 [앱 정보 열기] 터치\n2. 우측 상단 ⠇(점 3개 메뉴) 터치\n3. '제한된 설정 허용' 선택 후 생체/패턴 인증\n4. 접근성 화면으로 돌아와 스위치를 켜면 즉시 활성화됩니다!",
-                        color = TextSecondary,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = onRequestAppDetailsSettings,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = NeonAmber,
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("앱 정보 열기 (3점 메뉴 > 제한된 설정 허용)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    }
-                }
-            }
-        }
-
-        // 1. Accessibility Service Permission card
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (hasAccessibilityPermission) NeonGreen else NeonCyan
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = if (hasAccessibilityPermission) NeonGreen else NeonCyan
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "실시간 즉각 가로채기 (접근성 서비스)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (hasAccessibilityPermission)
-                            "✓ 접근성 서비스가 켜져 있습니다. 잠긴 앱을 누르면 0.05초 만에 잠금 화면이 바로 뜨고, 뒤로가기 누르면 해당 앱이 꺼집니다."
-                        else
-                            "⚡ [필수 권한] 잠긴 앱 클릭 시 바로 잠금 화면을 띄우고 뒤로가기 시 실행을 원천 차단하려면 접근성 서비스가 켜져 있어야 합니다.",
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = onRequestAccessibilityPermission,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (hasAccessibilityPermission) NeonGreen.copy(alpha = 0.2f) else NeonCyan,
-                            contentColor = if (hasAccessibilityPermission) NeonGreen else Color.Black
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = if (hasAccessibilityPermission) "접근성 서비스 정상 작동 중" else "접근성 설정 열기",
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-
-        // 2. Overlay Permission card
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (hasOverlayPermission) NeonGreen else NeonAmber
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Layers,
-                            contentDescription = null,
-                            tint = if (hasOverlayPermission) NeonGreen else NeonAmber
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "다른 앱 위에 표시 권한",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (hasOverlayPermission)
-                            "✓ 오버레이 권한이 허용되어 있습니다. 다른 앱 위에 즉각적으로 보안 창을 덮어씌웁니다."
-                        else
-                            "잠긴 앱 화면 위로 보안 잠금창을 띄우기 위해 필요한 권한입니다.",
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = onRequestOverlayPermission,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (hasOverlayPermission) NeonGreen.copy(alpha = 0.2f) else NeonAmber,
-                            contentColor = if (hasOverlayPermission) NeonGreen else Color.Black
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = if (hasOverlayPermission) "오버레이 권한 허용됨" else "다른 앱 위에 표시 설정 열기",
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3. Usage Stats Permission card
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (hasUsageStatsPermission) NeonGreen else CyberBorder
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = if (hasUsageStatsPermission) NeonGreen else TextSecondary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "사용정보 접근 권한 (보조 이중 감지)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (hasUsageStatsPermission)
-                            "✓ 백그라운드 이중 감시가 활성화되어 있습니다."
-                        else
-                            "접근성 서비스와 별개로 백그라운드에서 실행 앱을 이중 확인하는 보조 권한입니다.",
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = onRequestUsageStatsPermission,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (hasUsageStatsPermission) NeonGreen.copy(alpha = 0.2f) else CyberSurfaceDark,
-                            contentColor = if (hasUsageStatsPermission) NeonGreen else TextPrimary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = if (hasUsageStatsPermission) "사용정보 권한 허용됨" else "사용정보 접근 설정 열기",
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3.5 Feature: Security File Vault (AES-256 File Crypto)
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.EnhancedEncryption,
-                                contentDescription = null,
-                                tint = NeonGreen
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "보안 파일 금고 (AES-256 암호화/복호화)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "모든 용량의 사진, 영상, 문서를 앱 고유 키로 스트리밍 암호화합니다. 이 앱 없이는 복호화가 불가능하며 필요 시 즉시 원본으로 복구합니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = onOpenVault,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = NeonGreen,
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.EnhancedEncryption,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("보안 파일 금고 열기 (암호화/복호화 관리) ▶", fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(onClick = onOpenSecureNotes, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple), modifier = Modifier.fillMaxWidth()) {
-                        Text("보안 메모 열기", color = NeonPurple, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // 3.6 Feature: Anti-Peeping Privacy Filter
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.VisibilityOff,
-                                contentDescription = null,
-                                tint = NeonAmber
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "엿보기 방지 화면 가림막 (Privacy Shade)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "중앙 읽기 영역은 선명하게, 주변은 어둡게 가려 한눈에 보이는 정보를 줄입니다. 앱 화면은 캡처·녹화·최근 앱 미리보기에서도 숨겨집니다. 빠른 설정 편집에서 ‘사생활 보호 화면’과 ‘즉시 잠금’ 타일을 추가할 수 있습니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = onTogglePrivacyFilter,
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(imageVector = Icons.Default.VisibilityOff, contentDescription = null, tint = NeonAmber, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("화면 가림막 켜기 / 끄기 토글", color = NeonAmber, fontWeight = FontWeight.Bold)
-                    }
-                    OutlinedButton(onClick = onConfigureDisguise, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("위장 아이콘 설정", color = NeonAmber, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onConfigureDuressPin, enabled = lockConfig.lockType == LockType.PIN, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed), modifier = Modifier.fillMaxWidth()) {
-                        Text(if (lockConfig.lockType == LockType.PIN) "듀레스 · 미끼 PIN 설정" else "듀레스/미끼 PIN: PIN 잠금 방식에서 사용 가능", color = NeonRed, fontWeight = FontWeight.Bold)
-                    }
-                    OutlinedButton(onClick = onConfigureEmergencyContact, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("잠금 화면 비상 연락처", color = NeonAmber, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onEditLockStyle, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("잠금 화면 스타일 편집기", color = NeonCyan, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onManageBackup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("재설치 백업 · 복원", color = NeonCyan, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onShowRecoveryQr, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen), modifier = Modifier.fillMaxWidth()) { Text("오프라인 복구 QR 만들기", color = NeonGreen, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onScanRecoveryQr, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("복구 QR 스캔", color = NeonAmber, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onOpenPermissionWizard, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed), modifier = Modifier.fillMaxWidth()) { Text("권한 설정 도우미 다시 보기", color = NeonRed, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onOpenExcludedApps, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text("잠금 제외 앱 관리", color = NeonAmber, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onOpenAppSchedules, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan), modifier = Modifier.fillMaxWidth()) { Text("앱별 잠금 일정", color = NeonCyan, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onOpenRecoverySetup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, if (recoveryConfigured) NeonGreen else NeonAmber), modifier = Modifier.fillMaxWidth()) { Text(if (recoveryConfigured) "복구 질문 다시 설정 (등록됨)" else "비밀번호 잊었을 때 복구 질문 등록", color = if (recoveryConfigured) NeonGreen else NeonAmber, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onOpenRecoveryKeySetup, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, if (recoveryKeyConfigured) NeonGreen else NeonCyan), modifier = Modifier.fillMaxWidth()) { Text(if (recoveryKeyConfigured) "12자리 복구키 관리 (등록됨)" else "12자리 복구키 설정", color = if (recoveryKeyConfigured) NeonGreen else NeonCyan, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = onCheckForUpdates, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen), modifier = Modifier.fillMaxWidth()) { Text("업데이트 확인", color = NeonGreen, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = { onToggleNotificationPrivacy(!lockConfig.isNotificationPrivacyEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple), modifier = Modifier.fillMaxWidth()) { Text(if (lockConfig.isNotificationPrivacyEnabled) "잠긴 앱 알림 숨김: 켜짐" else "잠긴 앱 알림 숨김 켜기", color = NeonPurple, fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onClick = { onToggleFaceDownProtection(!isFaceDownProtectionEnabled) }, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth()) { Text(if (isFaceDownProtectionEnabled) "뒤집기 보호: 켜짐" else "뒤집으면 즉시 잠금 켜기", color = NeonAmber, fontWeight = FontWeight.Bold) }
-                }
-            }
-        }
-
-        // 3.7 Feature: Random PIN Keypad
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (lockConfig.isRandomPinKeypad) NeonCyan else CyberBorder
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.Dialpad,
-                                contentDescription = null,
-                                tint = NeonCyan
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "PIN 키패드 무작위 재배치 (Random Keypad)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "PIN 인증 시 0~9 숫자 위치를 무작위로 섞어 주변 엿보기 및 손가락 이동 패턴 추적을 방지합니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.isRandomPinKeypad,
-                            onCheckedChange = onToggleRandomPin,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonCyan
-                            )
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3.8 Feature: Intruder Alarm Siren
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (lockConfig.isAiGuardEnabled) NeonPurple else CyberBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Default.Security, contentDescription = null, tint = NeonPurple)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text("AI 가드 · 이상 행동 감지", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text("PIN·문자 비밀번호의 입력 속도·간격·터치 압력·기기 각도를 기기 안에서만 학습합니다. 패턴이 크게 다르면 추가 인증을 요청합니다.", color = TextSecondary, fontSize = 12.sp)
-                            }
-                        }
-                        Switch(checked = lockConfig.isAiGuardEnabled, onCheckedChange = onToggleAiGuard, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = NeonPurple))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("비밀번호 1회 실패 시 5초 음성 기록", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            Text("AI 가드와 관계없이 작동합니다. 마이크 권한이 필요하며, 최대 10개 파일을 기기 내부에만 보관합니다.", color = TextSecondary, fontSize = 11.sp)
-                        }
-                        Switch(checked = lockConfig.isAiGuardVoiceRecordingEnabled, onCheckedChange = onToggleAiGuardVoiceRecording, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = NeonRed))
-                    }
-                    if (lockConfig.isAiGuardEnabled) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("감지 민감도", color = TextSecondary, fontSize = 12.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf(1 to "낮음", 2 to "보통", 3 to "높음").forEach { (value, label) ->
-                                FilterChip(selected = lockConfig.aiGuardSensitivity == value, onClick = { onChangeAiGuardSensitivity(value) }, label = { Text(label) }, modifier = Modifier.weight(1f), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonPurple, selectedLabelColor = Color.White))
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text("이상 감지 시 추가 인증", color = TextSecondary, fontSize = 12.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                            AiGuardFallback.entries.forEach { fallback ->
-                                FilterChip(selected = lockConfig.aiGuardFallback == fallback, onClick = { onChangeAiGuardFallback(fallback) }, label = { Text(fallback.title, fontSize = 10.sp) }, modifier = Modifier.weight(1f), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonPurple, selectedLabelColor = Color.White))
-                            }
-                        }
-                        OutlinedButton(onClick = onResetAiGuardLearning, shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, tint = NeonAmber, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("AI 가드 학습 데이터 초기화 · 재학습", color = NeonAmber, fontSize = 12.sp)
-                        }
-                        Text("처음 5회 정상 인증은 기준 학습에 사용됩니다. 비밀번호 내용이나 원본 터치 기록은 저장하지 않습니다.", color = TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (lockConfig.isIntruderSirenEnabled) NeonRed else CyberBorder
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = NeonRed
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "침입자 경보 사이렌 (Intruder Alarm Siren)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "잠금 해제 2회 이상 실패 시 큰 경보음을 울려 침입자를 쫓아냅니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.isIntruderSirenEnabled,
-                            onCheckedChange = onToggleIntruderSiren,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonRed
-                            )
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3.9 Feature: Panic Shake to Lock
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (lockConfig.isPanicShakeEnabled) NeonPurple else CyberBorder
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.Security,
-                                contentDescription = null,
-                                tint = NeonPurple
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "긴급 안심 흔들기 즉시 재잠금 (Panic Shake)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "위급한 순간 스마트폰을 강하게 흔들면 임시 해제된 모든 잠금이 즉시 재설정되어 데이터를 보호합니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.isPanicShakeEnabled,
-                            onCheckedChange = onTogglePanicShake,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonPurple
-                            )
-                        )
-                    }
-                }
-            }
-        }
-
-        // 4. Feature: Stealth Pattern (패턴 선 숨김)
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.VisibilityOff,
-                                contentDescription = null,
-                                tint = NeonCyan
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "스텔스 패턴 모드 (선 숨김)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "패턴을 그릴 때 연결선이 보이지 않아 주변 훔쳐보기를 완벽 차단합니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.isStealthPattern,
-                            onCheckedChange = onToggleStealthPattern,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonCyan
-                            )
-                        )
-                    }
-                }
-            }
-        }
-
-        // 5. Feature: Fake Crash Alert (오류 가림막)
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = NeonRed
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "앱 실행 오류 가림막 (Crash Alert 보호)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "잠긴 앱 실행 시 시스템 오류 안내창을 띄워 접근을 방어합니다. 확인 버튼을 길게 누르면 인증 화면이 열립니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.isFakeCrashEnabled,
-                            onCheckedChange = onToggleFakeCrash,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonRed
-                            )
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = onConfigureFakeScreen,
-                        enabled = lockConfig.isFakeCrashEnabled,
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonRed),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("앱별 가짜 화면 설정", color = NeonRed, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // 6. Feature: Biometric Authentication (Fingerprint & Face Recognition)
-        item {
-            val context = LocalContext.current
-            val bioStatus = remember { BiometricHelper.checkBiometricStatus(context) }
-
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (lockConfig.biometricEnabled) NeonCyan else CyberBorder
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.Fingerprint,
-                                contentDescription = null,
-                                tint = NeonCyan
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "생체 인식 인증 (지문 및 얼굴)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "안드로이드 시스템 지문 센서 및 안면 인식으로 즉시 잠금 해제합니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.biometricEnabled,
-                            onCheckedChange = onToggleBiometric,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonCyan
-                            )
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Hardware status badge
-                    val (statusColor, statusText) = when (bioStatus) {
-                        BiometricStatus.AVAILABLE -> NeonGreen to "✓ 지문/얼굴 센서 연동 완료: 실제 하드웨어 인증 사용 가능"
-                        BiometricStatus.NOT_ENROLLED -> NeonAmber to "⚠️ 기기에 지문/얼굴 미등록: 폰 설정에서 지문을 등록해주세요"
-                        BiometricStatus.NO_HARDWARE -> Color(0xFF94A3B8) to "ℹ️ 하드웨어 센서 미감지: 테스트 시뮬레이션 모드가 동작합니다"
-                        BiometricStatus.HW_UNAVAILABLE -> NeonAmber to "⚠️ 센서를 일시적으로 사용할 수 없습니다"
-                        BiometricStatus.UNAVAILABLE -> Color(0xFF94A3B8) to "ℹ️ 생체 인식을 지원하지 않는 환경입니다"
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = statusColor.copy(alpha = 0.12f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = statusText,
-                            color = statusColor,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-
-                    if (bioStatus == BiometricStatus.NOT_ENROLLED) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = {
-                                try {
-                                    context.startActivity(BiometricHelper.getBiometricEnrollIntent())
-                                } catch (e: Exception) {
-                                    // fallback
-                                }
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonAmber),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("기기 생체인식(지문/얼굴) 등록 설정 열기 ▶", color = NeonAmber, fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        // 6.2 Feature: Intruder Selfie Setting Card
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (lockConfig.isIntruderSelfieEnabled) NeonRed.copy(alpha = 0.5f) else CyberBorder
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.PhotoCamera,
-                                contentDescription = null,
-                                tint = NeonRed
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "침입자 전면 카메라 셀카",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "잠금 실패 시 몰래 전면 카메라로 사진을 촬영하여 '침입자 셀카' 탭에 보관합니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.isIntruderSelfieEnabled,
-                            onCheckedChange = onToggleIntruderSelfie,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonRed
-                            )
-                        )
-                    }
-
-                    if (lockConfig.isIntruderSelfieEnabled) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "촬영 기준 (연속 실패 횟수):",
-                            color = TextPrimary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            listOf(1 to "1회 실패 즉시", 2 to "2회 실패 시", 3 to "3회 실패 시").forEach { (threshold, label) ->
-                                FilterChip(
-                                    selected = lockConfig.intruderSelfieThreshold == threshold,
-                                    onClick = { onChangeIntruderSelfieThreshold(threshold) },
-                                    label = { Text(label, fontSize = 11.sp) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = NeonRed,
-                                        selectedLabelColor = Color.White
-                                    ),
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 6.5 Security Type Selection: Pattern, PIN, Password, Calculator, Knock Code
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val lockTypeIcon = when (lockConfig.lockType) {
-                            LockType.PIN -> Icons.Default.Dialpad
-                            LockType.PATTERN -> Icons.Default.GridOn
-                            LockType.PASSWORD -> Icons.Default.Password
-                            LockType.CALCULATOR -> Icons.Default.Calculate
-                            LockType.KNOCK_CODE -> Icons.Default.TouchApp
-                        }
-                        Icon(
-                            imageVector = lockTypeIcon,
-                            contentDescription = null,
-                            tint = NeonCyan
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "잠금 인증 방식 (${lockConfig.lockType.title})",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "원하는 보안 잠금 형태를 선택하세요. 패턴, 숫자 PIN, 영문/숫자 비밀번호, 보안 계산기, 노크 코드 등을 지원합니다.",
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Row 1: Pattern, PIN
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = lockConfig.lockType == LockType.PATTERN,
-                            onClick = { onChangeLockType(LockType.PATTERN) },
-                            label = { Text("패턴 (${lockConfig.gridSize}x${lockConfig.gridSize})") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonCyan,
-                                selectedLabelColor = Color.Black
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-                        FilterChip(
-                            selected = lockConfig.lockType == LockType.PIN,
-                            onClick = { onChangeLockType(LockType.PIN) },
-                            label = { Text("PIN (숫자)") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonCyan,
-                                selectedLabelColor = Color.Black
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Row 2: Password, Calculator, Knock Code
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        FilterChip(
-                            selected = lockConfig.lockType == LockType.PASSWORD,
-                            onClick = { onChangeLockType(LockType.PASSWORD) },
-                            label = { Text("비밀번호", fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonCyan,
-                                selectedLabelColor = Color.Black
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-                        FilterChip(
-                            selected = lockConfig.lockType == LockType.CALCULATOR,
-                            onClick = { onChangeLockType(LockType.CALCULATOR) },
-                            label = { Text("보안 계산기", fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonCyan,
-                                selectedLabelColor = Color.Black
-                            ),
-                            modifier = Modifier.weight(1.1f)
-                        )
-                        FilterChip(
-                            selected = lockConfig.lockType == LockType.KNOCK_CODE,
-                            onClick = { onChangeLockType(LockType.KNOCK_CODE) },
-                            label = { Text("노크 코드", fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonCyan,
-                                selectedLabelColor = Color.Black
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Configuration Button depending on active LockType
-                    when (lockConfig.lockType) {
-                        LockType.PIN -> {
-                            OutlinedButton(
-                                onClick = onChangePin,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(imageVector = Icons.Default.Dialpad, contentDescription = null, tint = NeonCyan)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("새 4자리 PIN 비밀번호 등록/변경", color = NeonCyan, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        LockType.PASSWORD -> {
-                            OutlinedButton(
-                                onClick = onChangePassword,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(imageVector = Icons.Default.Password, contentDescription = null, tint = NeonCyan)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("새 영문/숫자 비밀번호(Password) 등록/변경", color = NeonCyan, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        LockType.CALCULATOR -> {
-                            OutlinedButton(
-                                onClick = onChangeCalculatorCode,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(imageVector = Icons.Default.Calculate, contentDescription = null, tint = NeonCyan)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("계산기 해제 암호(=) 등록/변경 (현재: ${lockConfig.savedCalculatorCode})", color = NeonCyan, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        LockType.KNOCK_CODE -> {
-                            OutlinedButton(
-                                onClick = onChangeKnockCode,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(imageVector = Icons.Default.TouchApp, contentDescription = null, tint = NeonCyan)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("4분면 노크 코드 터치 순서 등록/변경 (${lockConfig.savedKnockCode.size}회)", color = NeonCyan, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        LockType.PATTERN -> {
-                            OutlinedButton(
-                                onClick = onChangePattern,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(imageVector = Icons.Default.GridOn, contentDescription = null, tint = NeonCyan)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("그리드 크기(${lockConfig.gridSize}x${lockConfig.gridSize}) 및 패턴 변경", color = NeonCyan, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 6.6 Lock Timeout Grace Period (타이핑/입력 중 재잠김 방지 & 재잠금 주기 설정)
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Default.Timer, contentDescription = null, tint = NeonAmber)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "재잠금 지연 시간 (키보드 입력 보호)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "앱 해제 후 다른 작업(키보드 타이핑, 일시 전환 등) 중 비밀번호가 연속으로 다시 뜨지 않도록 유예 시간을 둡니다.",
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    val timeoutOptions = listOf(
-                        0 to "즉시",
-                        15 to "15초",
-                        30 to "30초",
-                        60 to "1분",
-                        300 to "5분"
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        timeoutOptions.forEach { (seconds, label) ->
-                            FilterChip(
-                                selected = lockConfig.lockTimeoutSeconds == seconds,
-                                onClick = { onChangeLockTimeout(seconds) },
-                                label = { Text(label, fontSize = 12.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = NeonAmber,
-                                    selectedLabelColor = Color.Black
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 6.7 App Self Protection (본 앱 자체 보호)
-        item {
-            val context = LocalContext.current
-            fun pickTime(isStart: Boolean) {
-                val hour = if (isStart) lockConfig.scheduleStartHour else lockConfig.scheduleEndHour
-                val minute = if (isStart) lockConfig.scheduleStartMinute else lockConfig.scheduleEndMinute
-                TimePickerDialog(context, { _, selectedHour, selectedMinute ->
-                    onUpdateConfig(if (isStart) lockConfig.copy(scheduleStartHour = selectedHour, scheduleStartMinute = selectedMinute)
-                    else lockConfig.copy(scheduleEndHour = selectedHour, scheduleEndMinute = selectedMinute))
-                }, hour, minute, true).show()
-            }
-            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = CyberCardDark), border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder), modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("시간대 자동 재잠금", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text("설정한 시간에는 잠긴 앱을 다시 열 때마다 인증합니다.", color = TextSecondary, fontSize = 12.sp)
-                        }
-                        Switch(checked = lockConfig.isScheduleLockEnabled, onCheckedChange = { onUpdateConfig(lockConfig.copy(isScheduleLockEnabled = it)) })
-                    }
-                    if (lockConfig.isScheduleLockEnabled) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { pickTime(true) }, modifier = Modifier.weight(1f)) { Text("시작 %02d:%02d".format(lockConfig.scheduleStartHour, lockConfig.scheduleStartMinute)) }
-                            OutlinedButton(onClick = { pickTime(false) }, modifier = Modifier.weight(1f)) { Text("종료 %02d:%02d".format(lockConfig.scheduleEndHour, lockConfig.scheduleEndMinute)) }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 6.7 App Self Protection (본 앱 자체 보호)
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth().padding(18.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("화면을 끄면 즉시 재잠금", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text("화면을 다시 켰을 때 잠긴 앱은 인증을 다시 요구합니다.", color = TextSecondary, fontSize = 12.sp)
-                    }
-                    Switch(checked = lockConfig.isScreenOffLockEnabled, onCheckedChange = onToggleScreenOffLock)
-                }
-            }
-        }
-
-        // 6.7 App Self Protection (본 앱 자체 보호)
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(imageVector = Icons.Default.Security, contentDescription = null, tint = NeonGreen)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "앱 자체 보호 (App Locker 보안)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "타인이 App Lock & Vault를 켜서 잠금을 무단 해제하지 못하도록 본 앱 진입 시에도 잠금을 적용합니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.isAppSelfProtectEnabled,
-                            onCheckedChange = onToggleAppSelfProtect,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonGreen
-                            )
-                        )
-                    }
-                }
-            }
-        }
-
-        // 6.8 Feature: Uninstall Protection (앱 삭제/제거 원천 방지 보호 스위치)
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (lockConfig.isUninstallProtectionEnabled) NeonRed else CyberBorder
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(imageVector = Icons.Default.Delete, contentDescription = null, tint = NeonRed)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "앱 삭제/제거 방지 보호 스위치",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "남이 어떤 앱도 임의로 삭제(Uninstall)하거나 시스템 패키지 관리자를 조작하지 못하도록 삭제 시도 화면을 즉각 원천 차단합니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.isUninstallProtectionEnabled,
-                            onCheckedChange = onToggleUninstallProtection,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonRed
-                            )
-                        )
-                    }
-                }
-            }
-        }
-
-        // 7. Grid Size and Pattern configuration
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "보안 패턴 및 그리드 크기",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "현재 설정: ${lockConfig.gridSize} x ${lockConfig.gridSize} (총 ${lockConfig.gridSize * lockConfig.gridSize}개 노드 / 3x3~10x10 지원)",
-                        color = TextSecondary,
-                        fontSize = 13.sp
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Button(
-                        onClick = onChangePattern,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = NeonCyan,
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(imageVector = Icons.Default.GridOn, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("그리드 크기 및 새 패턴 등록", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // 8. Theme configuration
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "잠금 화면 배경 테마",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "현재 적용된 배경: ${lockConfig.backgroundTheme.title}",
-                        color = TextSecondary,
-                        fontSize = 13.sp
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    OutlinedButton(
-                        onClick = onChangeTheme,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonPurple),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ColorLens,
-                            contentDescription = null,
-                            tint = NeonPurple
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("배경 화면 테마 변경", color = NeonPurple, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = onPickCustomLockBackground,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(imageVector = Icons.Default.PhotoCamera, contentDescription = null, tint = NeonCyan)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (lockConfig.customLockBackgroundUri == null) "사진첩에서 배경 선택" else "선택한 사진 배경 바꾸기", color = NeonCyan, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // 8.5 개인정보 방어 확장 (제외 목록 · 클립보드 · 실행 기록)
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                FailedAttemptLimitCard(
-                    maxAttempts = maxFailedAttempts,
-                    lockoutMinutes = lockoutMinutes,
-                    onMaxAttemptsChange = onChangeMaxFailedAttempts,
-                    onLockoutMinutesChange = onChangeLockoutMinutes
+    if (viewMode == AppViewMode.GRID) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(apps, key = { it.id }) { app ->
+                AppGridCard(
+                    app = app,
+                    isSelectionMode = isSelectionMode,
+                    isSelected = selectedPackages.contains(app.packageName),
+                    onSelectToggle = { onSelectToggle(app.packageName) },
+                    onToggleLock = { onToggleLock(app.packageName, it) }
                 )
-                ClipboardAutoClearCard(
-                    enabled = clipboardAutoClearEnabled,
-                    seconds = clipboardClearSeconds,
-                    onEnabledChange = onToggleClipboardAutoClear,
-                    onSecondsChange = onChangeClipboardClearSeconds
-                )
-                SessionTimelineCard(sessions = sessionLog, onClear = onClearSessionLog)
             }
         }
-
-        // 9. Vibration Feedback
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = CyberCardDark),
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyberBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = NeonCyan)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "터치 진동 피드백",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "패턴 연결 노드 터치 및 PIN 키패드 입력 시 햅틱 진동 피드백을 제공합니다.",
-                                    color = TextSecondary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = lockConfig.isVibrationEnabled,
-                            onCheckedChange = onToggleVibration,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = NeonCyan
-                            )
-                        )
-                    }
-                }
+    } else {
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(apps, key = { it.id }) { app ->
+                AppItemCard(
+                    app = app,
+                    isSelectionMode = isSelectionMode,
+                    isSelected = selectedPackages.contains(app.packageName),
+                    onSelectToggle = { onSelectToggle(app.packageName) },
+                    onToggleLock = { onToggleLock(app.packageName, it) },
+                    onTestLaunch = { onTestLaunch(app) }
+                )
             }
         }
     }

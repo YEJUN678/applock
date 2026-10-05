@@ -58,6 +58,14 @@ enum class LockClockPosition(val title: String) { TOP_CENTER("상단 중앙"), T
 enum class LockIconShape(val title: String) { CIRCLE("원형"), ROUNDED("둥근 사각형"), SQUARE("각진 사각형") }
 enum class LockFontStyle(val title: String) { SANS("산세리프"), SERIF("세리프"), MONO("고정폭") }
 
+/** 잠금 화면에 표시되는 충전 애니메이션 스타일. */
+enum class LockChargingStyle(val title: String, val description: String) {
+    NONE("표시 안 함", "충전 정보를 숨깁니다"),
+    PULSE("맥동", "부드럽게 커졌다 줄어드는 빛"),
+    RING("충전 링", "남은 충전량을 링으로 표시"),
+    WAVE("전류 파형", "흐르는 파형 애니메이션")
+}
+
 data class LockConfig(
     val lockType: LockType = LockType.PATTERN,
     val gridSize: Int = 3, // 3 to 10
@@ -82,6 +90,7 @@ data class LockConfig(
     val lockClockPosition: LockClockPosition = LockClockPosition.TOP_CENTER,
     val lockIconShape: LockIconShape = LockIconShape.CIRCLE,
     val lockFontStyle: LockFontStyle = LockFontStyle.SANS,
+    val lockChargingStyle: LockChargingStyle = LockChargingStyle.RING,
     val isLockQuickActionsEnabled: Boolean = true,
     val lockTimeoutSeconds: Int = 30, // 0 = 즉시, 30 = 30초, 60 = 1분, 300 = 5분
     val isStealthPattern: Boolean = false, // Hide line while drawing pattern
@@ -142,5 +151,10 @@ data class IntruderLog(
     val usedLockType: String = "패턴",
     val photoPath: String? = null,
     val videoPath: String? = null,
-    val audioPath: String? = null
+    val audioPath: String? = null,
+    // 실패가 일어난 위치 (로컬 전용, 서버 전송 없음)
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val locationText: String? = null,
+    val placeName: String? = null
 )

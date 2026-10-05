@@ -65,6 +65,7 @@ import com.example.model.BackgroundTheme
 import com.example.model.LockType
 import com.example.model.LockAccent
 import com.example.model.LockClockPosition
+import com.example.model.LockChargingStyle
 import com.example.model.LockClockStyle
 import com.example.model.LockFontStyle
 import com.example.model.LockIconShape
@@ -112,6 +113,7 @@ fun LockOverlayScreen(
     lockClockPosition: LockClockPosition = LockClockPosition.TOP_CENTER,
     lockIconShape: LockIconShape = LockIconShape.CIRCLE,
     lockFontStyle: LockFontStyle = LockFontStyle.SANS,
+    lockChargingStyle: LockChargingStyle = LockChargingStyle.RING,
     isLockQuickActionsEnabled: Boolean = true,
     biometricEnabled: Boolean,
     isStealthPattern: Boolean = false,
@@ -584,6 +586,20 @@ fun LockOverlayScreen(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
+
+            // 충전 중일 때만 나타나는 애니메이션 (설정에서 스타일을 고를 수 있다)
+            if (lockChargingStyle != LockChargingStyle.NONE) {
+                val chargingState = com.example.ui.components.rememberChargingState().value
+                if (chargingState.isCharging) {
+                    com.example.ui.components.ChargingIndicator(
+                        style = lockChargingStyle,
+                        state = chargingState,
+                        modifier = Modifier.fillMaxWidth(),
+                        accent = accentColor
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
 
             if (isLockQuickActionsEnabled) Text("◉                                      🔦", color = accentColor.copy(alpha = 0.8f), fontSize = 17.sp, modifier = Modifier.fillMaxWidth())
 

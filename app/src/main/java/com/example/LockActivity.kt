@@ -39,6 +39,8 @@ import com.example.util.InstalledAppsManager
 import com.example.util.IntruderCameraHelper
 import com.example.util.LockNotificationHelper
 import com.example.util.RecoveryQuestionManager
+import com.example.util.IntruderLocationCapture
+import com.example.util.CaptureLocation
 import com.example.util.RecoveryKeyManager
 import com.example.ui.components.RecoveryVerifyDialog
 import com.example.ui.components.RecoveryMethodChooserDialog
@@ -310,6 +312,7 @@ class LockActivity : FragmentActivity() {
                     lockClockPosition = lockConfig.lockClockPosition,
                     lockIconShape = lockConfig.lockIconShape,
                     lockFontStyle = lockConfig.lockFontStyle,
+                    lockChargingStyle = lockConfig.lockChargingStyle,
                     isLockQuickActionsEnabled = lockConfig.isLockQuickActionsEnabled,
                     biometricEnabled = lockConfig.biometricEnabled,
                     isStealthPattern = lockConfig.isStealthPattern,
@@ -490,10 +493,23 @@ class LockActivity : FragmentActivity() {
         // Evidence capture is independent of AI Guard: the first wrong credential can
         // create a short local audio/video record when the required permissions exist.
         if (attempts == 1 && targetPackage.isNotEmpty()) {
+            // 실패가 일어난 그 순간의 위치를 한 번만 확보해 증거와 함께 남긴다.
+            val location = IntruderLocationCapture.capture(this)
             if (lockConfig.isAiGuardVoiceRecordingEnabled) {
                 AiGuardAudioRecorder.recordFiveSeconds(this) { audioPath ->
                     audioPath?.let {
-                        AppLockPreferences.recordIntruderAttempt(this@LockActivity, targetPackage, appName, attempts, "$usedType · 5초 음성", audioPath = it)
+                        AppLockPreferences.recordIntruderAttempt(
+                            context = this@LockActivity,
+                            packageName = targetPackage,
+                            appName = appName,
+                            attempts = attempts,
+                            usedLockType = "$usedType · 5초 음성",
+                            audioPath = it,
+                            latitude = location?.latitude,
+                            longitude = location?.longitude,
+                            locationText = location?.coordinatesText,
+                            placeName = location?.placeName
+                        )
                     }
                 }
             }
@@ -505,22 +521,52 @@ class LockActivity : FragmentActivity() {
                         appName = appName,
                         attempts = attempts,
                         usedLockType = "$usedType · 5초 영상",
-                        videoPath = it
+                        videoPath = it,
+                        latitude = location?.latitude,
+                        longitude = location?.longitude,
+                        locationText = location?.coordinatesText,
+                        placeName = location?.placeName
                     )
                 }
-                recordPhotoEvidence(lockConfig, attempts, usedType)
+                recordPhotoEvidence(lockConfig, attempts, usedType, location)
             }
-        } else recordPhotoEvidence(lockConfig, attempts, usedType)
+        } else recordPhotoEvidence(lockConfig, attempts, usedType, null)
     }
 
-    private fun recordPhotoEvidence(lockConfig: com.example.model.LockConfig, attempts: Int, usedType: String) {
+    private fun recordPhotoEvidence(
+        lockConfig: com.example.model.LockConfig,
+        attempts: Int,
+        usedType: String,
+        location: CaptureLocation?
+    ) {
         if (attempts < lockConfig.intruderSelfieThreshold || targetPackage.isEmpty()) return
         if (lockConfig.isIntruderSelfieEnabled) {
             IntruderCameraHelper.captureIntruderSelfie(this@LockActivity, this@LockActivity) { photoPath ->
-                AppLockPreferences.recordIntruderAttempt(this@LockActivity, targetPackage, appName, attempts, usedType, photoPath = photoPath)
+                AppLockPreferences.recordIntruderAttempt(
+                    context = this@LockActivity,
+                    packageName = targetPackage,
+                    appName = appName,
+                    attempts = attempts,
+                    usedLockType = usedType,
+                    photoPath = photoPath,
+                    latitude = location?.latitude,
+                    longitude = location?.longitude,
+                    locationText = location?.coordinatesText,
+                    placeName = location?.placeName
+                )
             }
         } else {
-            AppLockPreferences.recordIntruderAttempt(this@LockActivity, targetPackage, appName, attempts, usedType)
+            AppLockPreferences.recordIntruderAttempt(
+                context = this@LockActivity,
+                packageName = targetPackage,
+                appName = appName,
+                attempts = attempts,
+                usedLockType = usedType,
+                latitude = location?.latitude,
+                longitude = location?.longitude,
+                locationText = location?.coordinatesText,
+                placeName = location?.placeName
+            )
         }
     }
 

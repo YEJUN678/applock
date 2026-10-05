@@ -19,8 +19,8 @@ android {
     targetSdk = 36
     // Keep this in sync with versions.txt. Android will reject an APK whose
     // versionCode is not higher than the installed build.
-    versionCode = 12
-    versionName = "10"
+    versionCode = 13
+    versionName = "11"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

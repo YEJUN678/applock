@@ -49,6 +49,7 @@ object AppLockPreferences {
     private const val KEY_LOCK_CLOCK_POSITION = "lock_clock_position"
     private const val KEY_LOCK_ICON_SHAPE = "lock_icon_shape"
     private const val KEY_LOCK_FONT_STYLE = "lock_font_style"
+    private const val KEY_LOCK_CHARGING_STYLE = "lock_charging_style"
     private const val KEY_LOCK_QUICK_ACTIONS = "lock_quick_actions"
     private const val KEY_TIMEOUT = "lock_timeout_seconds"
     private const val KEY_STEALTH_PATTERN = "stealth_pattern"
@@ -547,6 +548,7 @@ object AppLockPreferences {
         val clockPosition = runCatching { com.example.model.LockClockPosition.valueOf(prefs.getString(KEY_LOCK_CLOCK_POSITION, preset.clockPosition.name)!!) }.getOrDefault(com.example.model.LockClockPosition.TOP_CENTER)
         val iconShape = runCatching { com.example.model.LockIconShape.valueOf(prefs.getString(KEY_LOCK_ICON_SHAPE, preset.iconShape.name)!!) }.getOrDefault(com.example.model.LockIconShape.CIRCLE)
         val fontStyle = runCatching { com.example.model.LockFontStyle.valueOf(prefs.getString(KEY_LOCK_FONT_STYLE, com.example.model.LockFontStyle.SANS.name)!!) }.getOrDefault(com.example.model.LockFontStyle.SANS)
+        val chargingStyle = runCatching { com.example.model.LockChargingStyle.valueOf(prefs.getString(KEY_LOCK_CHARGING_STYLE, com.example.model.LockChargingStyle.RING.name)!!) }.getOrDefault(com.example.model.LockChargingStyle.RING)
         val quickActions = prefs.getBoolean(KEY_LOCK_QUICK_ACTIONS, true)
         val timeoutSeconds = prefs.getInt(KEY_TIMEOUT, 30)
         cachedTimeoutMs = timeoutSeconds * 1000L
@@ -596,6 +598,7 @@ object AppLockPreferences {
             lockClockPosition = clockPosition,
             lockIconShape = iconShape,
             lockFontStyle = fontStyle,
+            lockChargingStyle = chargingStyle,
             isLockQuickActionsEnabled = quickActions,
             lockTimeoutSeconds = timeoutSeconds,
             isStealthPattern = stealth,
@@ -650,6 +653,7 @@ object AppLockPreferences {
             .putString(KEY_LOCK_CLOCK_POSITION, config.lockClockPosition.name)
             .putString(KEY_LOCK_ICON_SHAPE, config.lockIconShape.name)
             .putString(KEY_LOCK_FONT_STYLE, config.lockFontStyle.name)
+            .putString(KEY_LOCK_CHARGING_STYLE, config.lockChargingStyle.name)
             .putBoolean(KEY_LOCK_QUICK_ACTIONS, config.isLockQuickActionsEnabled)
             .putInt(KEY_TIMEOUT, config.lockTimeoutSeconds)
             .putBoolean(KEY_STEALTH_PATTERN, config.isStealthPattern)
@@ -709,7 +713,11 @@ object AppLockPreferences {
                         usedLockType = obj.optString("usedLockType", "패턴"),
                         photoPath = obj.optString("photoPath").takeIf { it.isNotEmpty() },
                         videoPath = obj.optString("videoPath").takeIf { it.isNotEmpty() },
-                        audioPath = obj.optString("audioPath").takeIf { it.isNotEmpty() }
+                        audioPath = obj.optString("audioPath").takeIf { it.isNotEmpty() },
+                        latitude = if (obj.has("lat")) obj.optDouble("lat") else null,
+                        longitude = if (obj.has("lng")) obj.optDouble("lng") else null,
+                        locationText = obj.optString("locText").takeIf { it.isNotEmpty() },
+                        placeName = obj.optString("place").takeIf { it.isNotEmpty() }
                     )
                 )
             }
@@ -725,7 +733,11 @@ object AppLockPreferences {
         usedLockType: String = "패턴",
         photoPath: String? = null,
         videoPath: String? = null,
-        audioPath: String? = null
+        audioPath: String? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        locationText: String? = null,
+        placeName: String? = null
     ) {
         val logs = getIntruderLogs(context).toMutableList()
         val newLog = IntruderLog(
@@ -737,7 +749,11 @@ object AppLockPreferences {
             usedLockType = usedLockType,
             photoPath = photoPath,
             videoPath = videoPath,
-            audioPath = audioPath
+            audioPath = audioPath,
+            latitude = latitude,
+            longitude = longitude,
+            locationText = locationText,
+            placeName = placeName
         )
         logs.add(0, newLog)
         // Keep last 40 logs
@@ -755,6 +771,10 @@ object AppLockPreferences {
                     log.photoPath?.let { put("photoPath", it) }
                     log.videoPath?.let { put("videoPath", it) }
                     log.audioPath?.let { put("audioPath", it) }
+                    log.latitude?.let { put("lat", it) }
+                    log.longitude?.let { put("lng", it) }
+                    log.locationText?.let { put("locText", it) }
+                    log.placeName?.let { put("place", it) }
                 }
                 jsonArray.put(obj)
             }
@@ -787,6 +807,10 @@ object AppLockPreferences {
                     log.photoPath?.let { put("photoPath", it) }
                     log.videoPath?.let { put("videoPath", it) }
                     log.audioPath?.let { put("audioPath", it) }
+                    log.latitude?.let { put("lat", it) }
+                    log.longitude?.let { put("lng", it) }
+                    log.locationText?.let { put("locText", it) }
+                    log.placeName?.let { put("place", it) }
                 }
                 jsonArray.put(obj)
             }
