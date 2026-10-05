@@ -16,8 +16,8 @@ import com.example.R
  * 알림 하이라이트.
  *
  * 잠긴 앱의 알림을 그대로 두면 다른 사람 눈에 띄므로, 내용을 가린 알림을
- * 파랑~보라 그라디언트 카드로 바꿔 띄운다. AI 키가 설정돼 있으면
- * 요약 한 줄을 덧붙인다(키가 없으면 요약 없이 동작한다).
+ * 파랑~보라 그라디언트 카드로 바꿔 띄운다.
+ * AI 요약은 배치 큐([NotificationSummaryQueue])가 나중에 붙인다.
  */
 object NotificationHighlighter {
 
@@ -53,34 +53,95 @@ object NotificationHighlighter {
     /**
      * 원본 알림을 취소하고 하이라이트 알림을 대신 띄운다.
      *
-     * @return AI 요약을 붙였으면 true, 아니면 false
+     * 요약은 즉시 호출하지 않고 [onQueueSummary] 로 넘긴다.
+     * 알림마다 API 를 부르면 무료 티어 할당량을 금방 태우기 때문이다.
      */
     fun replaceWithHighlight(
         context: Context,
         sbn: StatusBarNotification,
         style: Style,
         summaryProvider: ((String, String) -> String?)? = null,
-        onCancelOriginal: (() -> Unit)? = null
+        onCancelOriginal: (() -> Unit)? = null,
+        onQueueSummary: ((String, String, String, String) -> Unit)? = null
     ) {
         val notification = sbn.notification
-        val appLabel = appLabel(context, sbn.packageName)
+        val label = appLabel(context, sbn.packageName)
         val title = notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
 
         ensureChannel(context)
 
-        // 알림 하나당 고유 ID 를 써야 여러 개가 서로 덮어쓰지 않는다.
-        val id = NOTIFICATION_ID_BASE + (sbn.key.hashCode() and 0xFFFF)
+        // 교체를 먼저 올린다. 원본을 먼저 지우면 알림이 사라졌다가 다시 떠서 깜빡인다.
+        val built = buildNotification(context, label, title, text, null, style)
+        NotificationManagerCompat.from(context).notify(idFor(sbn.packageName, title, text), built)
+        onCancelOriginal?.invoke()
+
+        // 소유자가 나중에 볼 수 있도록 모아 둔다(dismiss 해도 사라지지 않아야 한다).
+        NotificationInbox.add(context, sbn.packageName, label, title, text)
+
+        if (onQueueSummary != null) {
+            onQueueSummary(sbn.packageName, label, title, text)
+            return
+        }
+
+        // 배치 큐를 쓰지 않는 특수 경로만 즉시 요약한다.
+        if (summaryProvider != null) {
+            val prompt = "$label 알림\n제목: ${title.ifBlank { "(없음)" }}\n내용: ${text.ifBlank { "(없음)" }}"
+            Thread {
+                val summary = summaryProvider.invoke(label, prompt)?.takeIf { it.isNotBlank() } ?: return@Thread
+                updatePostedSummary(context, sbn.packageName, title, text, summary)
+                NotificationInbox.attachSummary(context, sbn.packageName, title, text, summary)
+            }.start()
+        }
+    }
+
+    /** 이미 떠 있는 하이라이트 알림에 요약을 붙여 갱신한다. */
+    fun updatePostedSummary(
+        context: Context,
+        packageName: String,
+        title: String,
+        text: String,
+        summary: String
+    ) {
+        val updated = buildNotification(
+            context = context,
+            appLabel = appLabel(context, packageName),
+            title = title,
+            text = text,
+            summary = summary,
+            style = NotificationHighlightPrefs.style(context)
+        )
+        NotificationManagerCompat.from(context).notify(idFor(packageName, title, text), updated)
+    }
+
+    /**
+     * 알림 ID 규칙.
+     * 게시와 갱신이 반드시 같은 ID 를 써야 카드가 새로 뜨지 않고 갱신된다.
+     */
+    private fun idFor(packageName: String, title: String, text: String): Int {
+        val base = "$packageName|$title|$text"
+        return NOTIFICATION_ID_BASE + (base.hashCode() and 0xFFFF)
+    }
+
+    private fun buildNotification(
+        context: Context,
+        appLabel: String,
+        title: String,
+        text: String,
+        summary: String?,
+        style: Style
+    ): Notification {
+        ensureChannel(context)
+        val hasSummary = !summary.isNullOrBlank()
         val views = RemoteViews(context.packageName, R.layout.notify_highlight).apply {
             setTextViewText(R.id.highlight_app, appLabel)
             setTextViewText(R.id.highlight_title, title.ifBlank { "새 알림" })
             setTextViewText(R.id.highlight_text, text.ifBlank { "내용 없음" })
-            setTextViewText(R.id.highlight_summary, "")
-            setViewVisibility(R.id.highlight_summary, View.GONE)
+            setTextViewText(R.id.highlight_summary, summary.orEmpty())
+            setViewVisibility(R.id.highlight_summary, if (hasSummary) View.VISIBLE else View.GONE)
             setInt(R.id.highlight_root, "setBackgroundResource", backgroundFor(style))
         }
-
-        val built = NotificationCompat.Builder(context, CHANNEL_ID)
+        return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setColor(0xFF4D7CFF.toInt())
             .setCustomContentView(views)
@@ -89,44 +150,7 @@ object NotificationHighlighter {
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .build()
-
-        // 교체를 먼저 올린다. 원본을 먼저 지우면 알림이 사라졌다가 다시 떠서 깜빡인다.
-        NotificationManagerCompat.from(context).notify(id, built)
-        onCancelOriginal?.invoke()
-
-        // 소유자가 나중에 볼 수 있도록 모아 둔다.
-        // 알림을 dismiss 하면 사라져서 "가리는 것"만 있고 "보는 것"이 없어지기 때문.
-        NotificationInbox.add(context, sbn.packageName, appLabel, title, text)
-
-        // AI 요약은 네트워크가 필요하므로 알림을 띄운 뒤에 갱신한다.
-        val prompt = "$appLabel 알림\n제목: ${title.ifBlank { "(없음)" }}\n내용: ${text.ifBlank { "(없음)" }}"
-        Thread {
-            val summary = summaryProvider?.invoke(appLabel, prompt)?.takeIf { it.isNotBlank() } ?: return@Thread
-
-            // 모아 둔 목록에도 요약을 붙인다(알림은 이미 떠 있으므로 바로는 안 보인다).
-            NotificationInbox.attachSummary(context, sbn.packageName, title, text, summary)
-            val summaryViews = RemoteViews(context.packageName, R.layout.notify_highlight).apply {
-                setTextViewText(R.id.highlight_app, appLabel)
-                setTextViewText(R.id.highlight_title, title.ifBlank { "새 알림" })
-                setTextViewText(R.id.highlight_text, text.ifBlank { "내용 없음" })
-                setTextViewText(R.id.highlight_summary, summary)
-                setViewVisibility(R.id.highlight_summary, View.VISIBLE)
-                setInt(R.id.highlight_root, "setBackgroundResource", backgroundFor(style))
-            }
-            NotificationManagerCompat.from(context).notify(
-                id,
-                NotificationCompat.Builder(context, CHANNEL_ID)
-                    .setSmallIcon(android.R.drawable.ic_lock_lock)
-                    .setColor(0xFF4D7CFF.toInt())
-                    .setCustomContentView(summaryViews)
-                    .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$text"))
-                    .setAutoCancel(true)
-                    .setSilent(true)
-                    .build()
-            )
-        }.start()
     }
-
 
     private fun appLabel(context: Context, packageName: String): String = runCatching {
         val manager = context.getPackageManager()

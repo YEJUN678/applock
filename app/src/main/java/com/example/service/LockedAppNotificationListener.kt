@@ -11,7 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.example.util.AppLockPreferences
 import com.example.util.NotificationHighlightPrefs
 import com.example.util.NotificationHighlighter
-import com.example.util.NotificationSummaryService
+import com.example.util.NotificationSummaryQueue
 import java.util.Collections
 
 /**
@@ -78,8 +78,9 @@ class LockedAppNotificationListener : NotificationListenerService() {
             context = context,
             sbn = sbn,
             style = NotificationHighlightPrefs.style(context),
-            summaryProvider = { appLabel, content ->
-                NotificationSummaryService.summarize(context, appLabel, content)
+            // 요약은 배치 큐로 맡긴다. 알림마다 API 를 부르면 무료 티어 한도를 태운다.
+            onQueueSummary = { pkg, label, alertTitle, alertText ->
+                NotificationSummaryQueue.queue(context, pkg, label, alertTitle, alertText)
             },
             onCancelOriginal = { cancelNotification(sbn.key) }
         )

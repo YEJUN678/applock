@@ -182,8 +182,9 @@ fun SecuritySectionScreen(state: SettingsUiState, actions: SettingsUiActions, on
                     SettingsToggleRow(
                         icon = Icons.Default.AutoAwesome,
                         title = "AI 요약 붙이기",
+                        // API 를 호출하므로 할당량을 아껴야 한다는 점을 여기에 적는다.
                         subtitle = if (state.aiKeyConfigured) {
-                            "알림 내용을 AI 로 한 줄 요약합니다 (본문 전송)"
+                            "5분씩 모아서 요약합니다 · 오늘 ${state.aiCallsRemaining}회 남음"
                         } else {
                             "AI 키를 먼저 설정해 주세요 (증거 AI 분석 화면)"
                         },

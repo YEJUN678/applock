@@ -272,6 +272,7 @@ fun AppLockerHomeScreen(
     failsafeEnabled: Boolean = false,
     failsafeWipeVault: Boolean = true,
     failsafeFailuresRequired: Int = 5,
+    aiCallsRemaining: Int = 0,
     openNotificationInbox: () -> Unit = {},
     configureFailsafe: () -> Unit = {},
     setFailsafeEnabled: (Boolean) -> Unit = {},
@@ -1102,6 +1103,7 @@ fun AppLockerHomeScreen(
                             setFailsafeEnabled = setFailsafeEnabled,
                             setFailsafeWipeVault = setFailsafeWipeVault,
                             setFailsafeFailures = setFailsafeFailures,
+                            aiCallsRemaining = aiCallsRemaining,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
@@ -1344,6 +1346,7 @@ fun SettingsView(
     failsafeEnabled: Boolean = false,
     failsafeWipeVault: Boolean = true,
     failsafeFailuresRequired: Int = 5,
+    aiCallsRemaining: Int = 0,
     openNotificationInbox: () -> Unit = {},
     configureFailsafe: () -> Unit = {},
     setFailsafeEnabled: (Boolean) -> Unit = {},
@@ -1386,7 +1389,8 @@ fun SettingsView(
         notificationInboxUnread = notificationInboxUnread,
         failsafeEnabled = failsafeEnabled,
         failsafeWipeVault = failsafeWipeVault,
-        failsafeFailuresRequired = failsafeFailuresRequired
+        failsafeFailuresRequired = failsafeFailuresRequired,
+        aiCallsRemaining = aiCallsRemaining
     )
 
     val actions = SettingsUiActions(

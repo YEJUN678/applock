@@ -80,6 +80,7 @@ import com.example.util.SessionReportRenderer
 import com.example.util.ScreenBlockStore
 import com.example.util.LockReasonStore
 import com.example.util.NotificationInbox
+import com.example.util.NotificationSummaryQueue
 import com.example.util.RecoveryFailsafe
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -1365,6 +1366,7 @@ fun AppLockerApp(
                 failsafeEnabled = RecoveryFailsafe.isEnabled(context),
                 failsafeWipeVault = RecoveryFailsafe.shouldWipeVault(context),
                 failsafeFailuresRequired = RecoveryFailsafe.failuresRequired(context),
+                aiCallsRemaining = NotificationSummaryQueue.remainingCalls(context),
                 openNotificationInbox = { (context as? MainActivity)?.openNotificationInbox() },
                 configureFailsafe = { (context as? MainActivity)?.showFailsafeSetup() },
                 setFailsafeEnabled = { enabled -> RecoveryFailsafe.setEnabled(context, enabled) },

@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,7 @@ import java.util.Locale
  * 여기는 소유자가 나중에 내용을 확인할 수 있는 자리다.
  * 알림을 dismiss 하면 사라지므로 따로 모아 두지 않으면 결국 못 봅니다.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun NotificationInboxScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -65,7 +67,14 @@ fun NotificationInboxScreen(onBack: () -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
     val refreshKey = remember { mutableIntStateOf(0) }
-    val groups = remember(refreshKey.value) { NotificationInbox.grouped(context) }
+    // (패키지명, 앱이름) 을 묶어서 돌린다. 길게 눌러 앱 단위로 지울 때 패키지명이 필요하다.
+    val groups = remember(refreshKey.value) {
+        NotificationInbox.all(context)
+            .groupBy { it.packageName to it.appName }
+            .toList()
+            .sortedByDescending { pair -> pair.second.maxOfOrNull { it.receivedAt } ?: 0L }
+            .map { (key, values) -> Triple(key.first, key.second, values.sortedByDescending { it.receivedAt }) }
+    }
     val unread = remember(refreshKey.value) { NotificationInbox.unreadCount(context) }
 
     Column(Modifier.fillMaxSize().background(CyberBgDark)) {
@@ -120,28 +129,38 @@ fun NotificationInboxScreen(onBack: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             ChipTab(
-                label = "전체 ${groups.sumOf { it.second.size }}",
+                label = "전체 ${groups.sumOf { it.third.size }}",
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 }
             )
-            groups.forEachIndexed { index, (appName, items) ->
+            groups.forEachIndexed { index, group ->
+                val appName = group.second
+                val items = group.third
                 ChipTab(
                     label = "$appName ${items.size}",
                     selected = selectedTab == index + 1,
-                    onClick = { selectedTab = index + 1 }
+                    onClick = { selectedTab = index + 1 },
+                    onLongClick = {
+                        // 길게 누르면 그 앱 알림을 한 번에 지운다.
+                        val removed = NotificationInbox.clearApp(context, groups[index].first)
+                        refreshKey.value++
+                        selectedTab = 0
+                        android.widget.Toast.makeText(context, "${appName} 알림 ${removed}건을 지웠습니다.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 )
             }
         }
 
-        val visible = if (selectedTab == 0) groups.map { it.first to it.second }
-        else listOf(groups[selectedTab - 1])
+        val visible = if (selectedTab == 0) groups else listOf(groups[selectedTab - 1])
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(OneUi.ScreenPadding),
             verticalArrangement = Arrangement.spacedBy(OneUi.CardSpacing)
         ) {
-            visible.forEach { (appName, items) ->
+        visible.forEach { group ->
+            val appName = group.second
+            val items = group.third
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                         Box(Modifier.size(6.dp).background(NeonCyan, CircleShape))
@@ -179,13 +198,14 @@ fun NotificationInboxScreen(onBack: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ChipTab(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ChipTab(label: String, selected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
             .background(if (selected) NeonCyan else OneUi.CardSurface)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Text(

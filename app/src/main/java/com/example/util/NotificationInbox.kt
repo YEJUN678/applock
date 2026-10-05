@@ -104,6 +104,18 @@ object NotificationInbox {
         save(context, load(context).filterNot { it.id == id })
     }
 
+    /**
+     * 앱 하나가 보낸 알림을 한 번에 지운다.
+     * 앱별로 묶어 쓰는 이유가 있는데, 전체 삭제는 다시 찾아 지우기 번거로워서이다.
+     */
+    fun clearApp(context: Context, packageName: String): Int {
+        val items = load(context)
+        val kept = items.filterNot { it.packageName == packageName }
+        if (kept.size == items.size) return 0
+        save(context, kept)
+        return items.size - kept.size
+    }
+
     fun clear(context: Context) {
         prefs(context).edit().remove(KEY_ITEMS).apply()
     }

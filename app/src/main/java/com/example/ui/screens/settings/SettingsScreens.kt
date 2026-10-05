@@ -110,7 +110,8 @@ data class SettingsUiState(
     val notificationInboxUnread: Int = 0,
     val failsafeEnabled: Boolean = false,
     val failsafeWipeVault: Boolean = true,
-    val failsafeFailuresRequired: Int = 5
+    val failsafeFailuresRequired: Int = 5,
+    val aiCallsRemaining: Int = 0
 )
 
 /** 설정 화면에서 쓰는 색상 열거형 별칭(UI 층이 util 타입을 직접 다루지 않도록 한다). */
