@@ -53,9 +53,12 @@ jobs:
             echo "::error title=versionCode 형식 오류::versions.txt 의 versionCode 는 정수여야 합니다 (현재: '$code')"
             exit 1
           fi
-          if [ "$code" -le "$gradle_code" ]; then
-            echo "::error title=versionCode 불일치::versions.txt(${code}) 는 build.gradle.kts(${gradle_code}) 보다 커야 합니다. 그 외에는 업데이트가 뜨지 않습니다."
+          if [ "$code" -lt "$gradle_code" ]; then
+            echo "::error title=versionCode 불일치::versions.txt(${code}) 가 빌드 버전(${gradle_code}) 보다 낮습니다. 이 빌드는 업데이트로 전달될 수 없습니다."
             exit 1
+          fi
+          if [ "$code" -eq "$gradle_code" ]; then
+            echo "::warning title=다음 버전 필요::이번 빌드를 설치하면 다음 버전이 올라갈 때까지 업데이트 창이 뜨지 않습니다."
           fi
           if [[ "$apk" != https://* ]]; then
             echo "::error title=apkUrl 형식 오류::apkUrl 은 https 로 시작해야 합니다 (현재: '$apk')"
