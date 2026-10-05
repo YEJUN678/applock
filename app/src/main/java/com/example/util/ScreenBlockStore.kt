@@ -36,8 +36,8 @@ object ScreenBlockStore {
     private const val PREFS = "screen_block"
     private const val KEY_ENTRIES = "entries"
     /** 같은 화면을 반복해서 기록하면 목록만 부풀므로 상한을 둔다. */
-    private const val MAX_ENTRIES = 400
-    private const val MAX_PER_APP = 60
+    private const val MAX_ENTRIES = 800
+    private const val MAX_PER_APP = 120
 
     /** 특정 앱의 화면 중 막힌 것만 돌려준다. */
     fun blockedScreens(context: Context): List<ScreenBlockEntry> =
