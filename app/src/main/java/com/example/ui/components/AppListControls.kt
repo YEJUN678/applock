@@ -1,5 +1,13 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -167,13 +175,36 @@ fun AppGridCard(
         app.isLocked -> NeonCyan.copy(alpha = 0.45f)
         else -> CyberBorder
     }
+    // 잠글 때 카드가 살짝 커졌다 돌아온다. 잠금 상태 변화가 눈에 보여야 한다.
+    val lockScale by animateFloatAsState(
+        targetValue = if (app.isLocked) 1.04f else 1f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium),
+        label = "gridLock"
+    )
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+        label = "gridPress"
+    )
     Column(
         modifier = modifier
+            .graphicsLayer {
+                // 잠김 배경을 살짝 키우고, 눌리는 동안에는 반대로 줄인다.
+                val base = if (app.isLocked) lockScale else 1f
+                scaleX = base * pressScale
+                scaleY = base * pressScale
+            }
             .clip(RoundedCornerShape(20.dp))
             .background(CyberCardDark)
-            .clickable {
-                if (isSelectionMode) onSelectToggle() else onToggleLock(!app.isLocked)
-            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    if (isSelectionMode) onSelectToggle() else onToggleLock(!app.isLocked)
+                }
+            )
             .padding(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

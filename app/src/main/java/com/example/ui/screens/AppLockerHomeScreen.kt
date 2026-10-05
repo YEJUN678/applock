@@ -5,6 +5,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -870,7 +878,25 @@ fun AppLockerHomeScreen(
                     )
                 }
             } else {
-                when (selectedTab) {
+                // 탭 전환 시 방향을 알 수 있어야 미끄러짐이 자연스럽다.
+                // (왼쪽 탭으로 가면 오른쪽에서, 오른쪽 탭으로 가면 왼쪽에서 들어온다)
+                AnimatedContent(
+                    targetState = selectedTab,
+                    transitionSpec = {
+                        val forward = targetState >= initialState
+                        val offset = if (forward) 40 else -40
+                        (slideInHorizontally(
+                            animationSpec = tween(260, easing = FastOutSlowInEasing),
+                            initialOffsetX = { offset }
+                        ) + fadeIn(animationSpec = tween(200))) togetherWith
+                            (slideOutHorizontally(
+                                animationSpec = tween(220, easing = FastOutSlowInEasing),
+                                targetOffsetX = { -offset }
+                            ) + fadeOut(animationSpec = tween(160)))
+                    },
+                    label = "tabSwitch"
+                ) { tab ->
+                when (tab) {
                     4 -> {
                         if (!isDuressMode) {
                             HomeDashboardScreen(
@@ -1107,6 +1133,7 @@ fun AppLockerHomeScreen(
                             }
                         )
                     }
+                }
                 }
             }
         }
@@ -2149,11 +2176,32 @@ fun IntruderSelfieVaultView(
 
 @Composable
 fun EmptyAppsView(title: String, desc: String) {
+    // 빈 화면이 갑자기 뜨면 앱이 멈춘 것처럼 느껴진다. 살짝 올라오며 나타나게 한다.
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
+    val enter by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (appeared) 1f else 0.88f,
+        animationSpec = androidx.compose.animation.core.tween(
+            durationMillis = 420,
+            easing = androidx.compose.animation.core.FastOutSlowInEasing
+        ),
+        label = "emptyEnter"
+    )
+    val fade by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 380),
+        label = "emptyFade"
+    )
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .fillMaxSize()
+            .graphicsLayer {
+                scaleX = enter
+                scaleY = enter
+                alpha = fade
+            }
             .padding(32.dp)
     ) {
         Surface(

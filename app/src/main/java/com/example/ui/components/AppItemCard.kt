@@ -51,6 +51,12 @@ import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.util.AppLockPreferences
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontWeight
 import com.example.ui.theme.NeonAmber
@@ -81,10 +87,23 @@ fun AppItemCard(
         app.isLocked -> NeonCyan.copy(alpha = 0.4f)
         else -> CyberBorder
     }
-    val cardBackground = when {
-        isSelected -> Color(0x2200F0FF)
-        else -> CyberCardDark
-    }
+    val cardBackground by animateColorAsState(
+        targetValue = if (isSelected) Color(0x2200F0FF) else CyberCardDark,
+        animationSpec = tween(220),
+        label = "cardBg"
+    )
+    // 잠기면 살짝 커졌다 돌아온다. 상태 변화가 눈에 보여야 안 놓친다.
+    val lockScale by animateFloatAsState(
+        targetValue = if (app.isLocked) 1.02f else 1f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium),
+        label = "cardLock"
+    )
+    // 선택 모드에서는 모든 카드가 살짝 작아져 "지금 여러 개 고르는 중" 이라는 신호가 된다.
+    val selectionScale by animateFloatAsState(
+        targetValue = if (isSelectionMode && !isSelected) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
+        label = "cardSelect"
+    )
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -94,6 +113,10 @@ fun AppItemCard(
         ),
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = lockScale * selectionScale
+                scaleY = lockScale * selectionScale
+            }
             .combinedClickable(
                 onClick = {
                     if (isSelectionMode) {
