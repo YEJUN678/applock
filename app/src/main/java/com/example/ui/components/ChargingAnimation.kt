@@ -14,6 +14,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -129,7 +130,10 @@ fun ChargingAnimation(
         label = "spin"
     )
 
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+    Box(
+        modifier = modifier.aspectRatio(1f),
+        contentAlignment = Alignment.Center
+    ) {
         when (style) {
             LockChargingStyle.NONE -> Unit
 
@@ -162,29 +166,52 @@ fun ChargingAnimation(
             }
 
             LockChargingStyle.RING -> {
-                // 남은 충전량을 링으로 보여준다
+                // 남은 충전량을 링으로 보여준다.
+                // 크기를 고정하지 않고 주어진 칸에 맞춰 그려야 찌부려지지 않는다.
                 val fraction = (state.levelPercent / 100f).coerceIn(0.02f, 1f)
-                Canvas(Modifier.size(132.dp)) {
-                    val stroke = 9.dp.toPx()
-                    val inset = stroke / 2
+                Canvas(Modifier.fillMaxSize()) {
+                    // 테두리 두께도 칸 크기에 비례하게 정한다.
+                    val diameter = size.minDimension
+                    val stroke = (diameter * 0.068f).coerceIn(4.dp.toPx(), 10.dp.toPx())
+                    val inset = stroke / 2f
+                    val arcSize = Size(diameter - stroke, diameter - stroke)
+                    val topLeft = Offset((size.width - diameter) / 2f + inset, (size.height - diameter) / 2f + inset)
+
+                    // 배경 트랙
                     drawArc(
                         color = accent.copy(alpha = 0.18f),
                         startAngle = -90f,
                         sweepAngle = 360f,
                         useCenter = false,
-                        topLeft = Offset(inset, inset),
-                        size = Size(size.width - stroke, size.height - stroke),
+                        topLeft = topLeft,
+                        size = arcSize,
                         style = Stroke(width = stroke, cap = StrokeCap.Round)
                     )
+                    // 충전량
                     drawArc(
-                        brush = Brush.sweepGradient(listOf(accent.copy(alpha = 0.5f), accent, accent.copy(alpha = 0.5f), accent), center = center),
+                        brush = Brush.sweepGradient(
+                            listOf(accent.copy(alpha = 0.5f), accent, accent.copy(alpha = 0.5f), accent),
+                            center = center
+                        ),
                         startAngle = -90f + (spin * 0.15f),
                         sweepAngle = 360f * fraction,
                         useCenter = false,
-                        topLeft = Offset(inset, inset),
-                        size = Size(size.width - stroke, size.height - stroke),
+                        topLeft = topLeft,
+                        size = arcSize,
                         style = Stroke(width = stroke, cap = StrokeCap.Round)
                     )
+                    // 완충이면 링 바깥에 은은한 빛을 한 겹 더한다.
+                    if (state.isFull) {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(Color.Transparent, accent.copy(alpha = 0.14f)),
+                                center = center,
+                                radius = diameter / 2f
+                            ),
+                            radius = diameter / 2f,
+                            center = center
+                        )
+                    }
                 }
             }
 
@@ -232,8 +259,9 @@ fun ChargingIndicator(
 ) {
     if (style == LockChargingStyle.NONE || !state.isCharging) return
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        ChargingAnimation(style = style, state = state, modifier = Modifier.height(72.dp), accent = accent)
-        Spacer(Modifier.height(6.dp))
+        // 높이를 넉넉히 준다. 좁으면 링이 찌부려진다.
+        ChargingAnimation(style = style, state = state, modifier = Modifier.height(108.dp), accent = accent)
+        Spacer(Modifier.height(8.dp))
         Text(
             text = when {
                 state.isFull -> "충전 완료 · ${state.levelPercent}%"
