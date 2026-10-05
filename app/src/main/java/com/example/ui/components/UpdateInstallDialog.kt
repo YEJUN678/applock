@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
@@ -126,8 +127,13 @@ fun UpdateInstallDialog(
             }
         },
         text = {
+            val bodyScroll = rememberScrollState()
             Column(
-                modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
+                modifier = Modifier
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(bodyScroll)
+                    // 릴리즈 노트가 길어지면 창이 화면 밖으로 밀리는 것을 막는다.
+                    .padding(end = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // 버전 비교 배너
@@ -209,6 +215,24 @@ fun UpdateInstallDialog(
                         fontSize = 11.sp,
                         lineHeight = 16.sp
                     )
+                }
+
+                // Scroll hint shown only when there is more content below.
+                if (bodyScroll.maxValue > 0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("아래로 스크롤해 더 보세요", color = TextSecondary, fontSize = 11.sp)
+                    }
                 }
             }
         },

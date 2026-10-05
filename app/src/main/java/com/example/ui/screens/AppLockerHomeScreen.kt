@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -320,6 +322,7 @@ fun AppLockerHomeScreen(
                             IconButton(onClick = { showMoreMenu = !showMoreMenu }, modifier = Modifier.size(38.dp)) {
                                 Icon(imageVector = Icons.Default.MoreVert, contentDescription = "더보기", tint = TextPrimary)
                             }
+                            val moreScrollState = rememberScrollState()
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = showMoreMenu,
                                 enter = fadeIn() + scaleIn(initialScale = 0.78f),
@@ -327,21 +330,67 @@ fun AppLockerHomeScreen(
                                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 42.dp)
                             ) {
                                 Surface(
+                                    // 화면이 좁을 때 2줄로 접힌 메뉴가 옆으로 넘치지 않게 가로 스크롤을 허용한다.
+                                    modifier = Modifier.widthIn(max = 320.dp).horizontalScroll(moreScrollState),
                                     shape = RoundedCornerShape(18.dp),
                                     color = CyberCardDark,
                                     shadowElevation = 12.dp,
                                     border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f))
                                 ) {
-                                    Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 4 }) { Icon(Icons.Default.Home, "홈 대시보드", tint = NeonGreen) }
-                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 5 }) { Icon(Icons.Default.InsertChart, "통계", tint = NeonCyan) }
-                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 6 }) { Icon(Icons.Default.Psychology, "증거 AI 분석", tint = NeonPurple) }
-                                        IconButton(onClick = { showMoreMenu = false; onOpenVault() }) { Icon(Icons.Default.EnhancedEncryption, "금고", tint = NeonGreen) }
-                                        IconButton(onClick = { showMoreMenu = false; onOpenSecureNotes() }) { Icon(Icons.Default.EnhancedEncryption, "보안 메모", tint = NeonPurple) }
-                                        IconButton(onClick = { showMoreMenu = false; onTogglePrivacyFilter() }) { Icon(Icons.Default.VisibilityOff, "사생활 필름", tint = NeonAmber) }
-                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 2 }) { Icon(Icons.Default.PhotoCamera, "침입자 기록", tint = NeonRed) }
-                                        if (!isDuressMode) IconButton(onClick = { showMoreMenu = false; selectedTab = 3 }) { Icon(Icons.Default.Settings, "설정 & 기능", tint = NeonCyan) }
-                                        IconButton(onClick = { showMoreMenu = false; onRefreshApps() }) { Icon(Icons.Default.Refresh, "새로고침", tint = TextPrimary) }
+                                    // 항목이 많아서 한 줄로 넘치므로 두 줄로 접고, 화면이 더 좁으면 가로 스크롤된다.
+                                    // 동작은 (라벨, () -> Unit) 로 담아둔다. @Composable 을 붙이면
+                                    // onClick 안에서 호출할 수 없어 컴파일이 깨진다.
+                                    val moreItems = buildList<Pair<String, () -> Unit>> {
+                                        if (!isDuressMode) add("홈 대시보드" to { selectedTab = 4 })
+                                        if (!isDuressMode) add("통계" to { selectedTab = 5 })
+                                        if (!isDuressMode) add("증거 AI 분석" to { selectedTab = 6 })
+                                        add("금고" to { onOpenVault() })
+                                        add("보안 메모" to { onOpenSecureNotes() })
+                                        add("사생활 필름" to { onTogglePrivacyFilter() })
+                                        if (!isDuressMode) add("침입자 기록" to { selectedTab = 2 })
+                                        if (!isDuressMode) add("설정 & 기능" to { selectedTab = 3 })
+                                        add("새로고침" to { onRefreshApps() })
+                                    }
+                                    val moreItemIcons = listOf<androidx.compose.ui.graphics.vector.ImageVector>(
+                                        Icons.Default.Home,
+                                        Icons.Default.InsertChart,
+                                        Icons.Default.Psychology,
+                                        Icons.Default.EnhancedEncryption,
+                                        Icons.Default.EnhancedEncryption,
+                                        Icons.Default.VisibilityOff,
+                                        Icons.Default.PhotoCamera,
+                                        Icons.Default.Settings,
+                                        Icons.Default.Refresh
+                                    )
+                                    val moreItemTints = listOf(
+                                        NeonGreen, NeonCyan, NeonPurple, NeonGreen, NeonPurple,
+                                        NeonAmber, NeonRed, NeonCyan, TextPrimary
+                                    )
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        moreItems.chunked(5).forEachIndexed { rowIndex, rowItems ->
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalAlignment = Alignment.Top
+                                            ) {
+                                                rowItems.forEachIndexed { indexInRow, entry ->
+                                                    val absoluteIndex = rowIndex * 5 + indexInRow
+                                                    MoreMenuItem(
+                                                        label = entry.first,
+                                                        icon = moreItemIcons[absoluteIndex],
+                                                        tint = moreItemTints[absoluteIndex],
+                                                        onClick = { showMoreMenu = false; entry.second() }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        if (moreScrollState.maxValue > 0) {
+                                            Text(
+                                                text = "좌우로 밀어 보세요",
+                                                color = TextSecondary,
+                                                fontSize = 10.sp,
+                                                modifier = Modifier.padding(top = 6.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1325,6 +1374,27 @@ private fun AppListBody(
                 )
             }
         }
+    }
+}
+
+/** 더보기 메뉴의 한 항목. 아이콘 아래에 이름까지 보여줘서 무엇인지 바로 안다. */
+@Composable
+private fun MoreMenuItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 6.dp)
+    ) {
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(3.dp))
+        Text(label, color = TextSecondary, fontSize = 9.sp, maxLines = 1)
     }
 }
 
