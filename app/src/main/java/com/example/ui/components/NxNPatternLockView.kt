@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonPurple
 import com.example.ui.theme.NeonRed
+import com.example.util.AppLockPreferences
 import kotlin.math.hypot
 
 @Composable
@@ -44,19 +45,14 @@ fun NxNPatternLockView(
     enabled: Boolean = true,
     isStealthMode: Boolean = false,
     isVibrationEnabled: Boolean = true,
+    /** 노드 하나를 지났을 때의 피드백(틱). */
+    onNodeTick: (() -> Unit)? = null,
+    /** 패턴이 완성됐을 때의 피드백(thud). */
+    onPatternCompleteFeedback: (() -> Unit)? = null,
     onPatternCompleted: (List<Int>) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val vibrator = remember(context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-    }
 
     val selectedNodes = remember { mutableStateListOf<Int>() }
     var currentTouchPosition by remember { mutableStateOf<Offset?>(null) }
@@ -78,9 +74,8 @@ fun NxNPatternLockView(
                         val node = findHitNode(offset, size.width.toFloat(), size.height.toFloat(), gridSize)
                         if (node != null) {
                             selectedNodes.add(node)
-                            if (isVibrationEnabled) {
-                                vibrateDevice(vibrator)
-                            }
+                            // 노드 하나를 지났다. 손끝으로 feel되는 피드백.
+                            if (isVibrationEnabled) onNodeTick?.invoke()
                         }
                     },
                     onDrag = { change, _ ->
@@ -90,14 +85,14 @@ fun NxNPatternLockView(
                         val node = findHitNode(pos, size.width.toFloat(), size.height.toFloat(), gridSize)
                         if (node != null && !selectedNodes.contains(node)) {
                             selectedNodes.add(node)
-                            if (isVibrationEnabled) {
-                                vibrateDevice(vibrator)
-                            }
+                            if (isVibrationEnabled) onNodeTick?.invoke()
                         }
                     },
                     onDragEnd = {
                         currentTouchPosition = null
                         if (selectedNodes.isNotEmpty()) {
+                            // 완성 신호는 인증 결과와 무관하게 먼저 알린다.
+                            if (isVibrationEnabled) onPatternCompleteFeedback?.invoke()
                             onPatternCompleted(selectedNodes.toList())
                         }
                     },
@@ -256,5 +251,22 @@ private fun vibrateDevice(vibrator: Vibrator) {
             vibrator.vibrate(20)
         }
     } catch (_: Exception) {
+    }
+}
+
+/**
+ * 패턴 입력 피드백 준비.
+ *
+ * 진동 설정이 꺼져 있으면 null 을 돌려줘서 아무 것도 울리지 않게 한다.
+ * 진동을 켜 두면 소리도 함께 난다(어두운 곳에서 화면을 보지 않고 그릴 수 있게).
+ */
+@Composable
+fun rememberLockHaptics(): LockHaptics? {
+    // LocalContext.current 는 composable 컨텍스트에서만 읽을 수 있어
+    // remember 밖에서 먼저 읽어야 한다.
+    val context = LocalContext.current
+    return remember(context) {
+        val enabled = AppLockPreferences.getLockConfig(context).isVibrationEnabled
+        if (enabled) LockHaptics.create(context, withSound = true) else null
     }
 }

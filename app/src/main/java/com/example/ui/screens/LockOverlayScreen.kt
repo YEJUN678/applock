@@ -45,6 +45,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
+import com.example.ui.components.rememberLockHaptics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -163,6 +165,9 @@ fun LockOverlayScreen(
         LockClockPosition.TOP_LEFT -> Alignment.TopStart
         LockClockPosition.TOP_RIGHT -> Alignment.TopEnd
     }
+    // 노드를 지날 때마다 손끝으로 feel되는 피드백(틱 / thud / 오답).
+    val lockHaptics = rememberLockHaptics()
+    DisposableEffect(Unit) { onDispose { lockHaptics?.release() } }
     var isError by remember { mutableStateOf(false) }
     var attemptCount by remember { mutableIntStateOf(0) }
     var messageText by remember {
@@ -511,12 +516,16 @@ fun LockOverlayScreen(
                         enabled = inputEnabled,
                         isStealthMode = isStealthPattern,
                         isVibrationEnabled = isVibrationEnabled,
+                        onNodeTick = { lockHaptics?.onNodePassed() },
+                        onPatternCompleteFeedback = { lockHaptics?.onCompleted() },
                         onPatternCompleted = { drawnPattern ->
                             if (drawnPattern == targetPattern) {
                                 onUnlockSuccess()
                             } else {
                                 isError = true
                                 attemptCount++
+                                // 오답은 낮고 둔탁한 톤 + 진동 두 번으로 알린다.
+                                lockHaptics?.onError()
                                 onFailedAttempt?.invoke(attemptCount)
                                 messageText = if (attemptCount >= 3) {
                                     "⚠️ 3회 실패! 침입 시도가 기록되었습니다."

@@ -5,6 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -69,6 +76,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Icon
 import com.example.model.AiGuardFallback
 import com.example.model.LockType
+import com.example.model.GuardProfile
+import com.example.model.GuardStrength
+import com.example.model.GuardPriority
 import com.example.util.NotificationHighlighter
 import com.example.ui.components.settings.SettingsCard
 import com.example.ui.components.settings.SettingsChoiceSheet
@@ -259,6 +269,67 @@ fun LockSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBack
     var sheet by remember { mutableStateOf<LockSheet?>(null) }
 
     SectionScaffold(SettingsSection.LOCK, onBack) {
+        item { SettingsSectionLabel("한 번만 고르면 됩니다") }
+        item {
+            SettingsCard(accent = OneUi.CardSurface) {
+                Text(
+                    "세 가지만 답하면 아래 스위치들이 알아서 맞춰집니다.",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+                PresetChoiceRow(
+                    title = "누구에게 숨길까요?",
+                    options = listOf(
+                        "가족" to GuardProfile.FAMILY,
+                        "동료" to GuardProfile.COWORKER,
+                        "그 외" to GuardProfile.OTHER
+                    ),
+                    selected = state.guardProfile,
+                    onSelect = actions.changeGuardProfile
+                )
+                PresetChoiceRow(
+                    title = "얼마나 강하게 숨길까요?",
+                    options = listOf(
+                        "신호" to GuardStrength.SIGNAL,
+                        "표준" to GuardStrength.NORMAL,
+                        "신호 안 보임" to GuardStrength.STEALTH
+                    ),
+                    selected = state.guardStrength,
+                    onSelect = actions.changeGuardStrength
+                )
+                PresetChoiceRow(
+                    title = "가장 먼저 지켜야 하는 건?",
+                    options = listOf(
+                        "사진" to GuardPriority.PHOTOS,
+                        "메신저" to GuardPriority.MESSENGER,
+                        "돈" to GuardPriority.MONEY
+                    ),
+                    selected = state.guardPriority,
+                    onSelect = actions.changeGuardPriority
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "기존 스위치들은 이 값에 맞춰 자동으로 켜고 꺼집니다. 직접 바꾸어도 됩니다.",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+
+        item { SettingsSectionLabel("자동 설정 결과") }
+        item {
+            SettingsCard(accent = OneUi.CardSurface) {
+                GuardEffectRow("은밀한 패턴", state.guardStrength != GuardStrength.NORMAL, "선을 숨겨 옆사람 눈을 피합니다")
+                GuardEffectRow("무작위 키패드", state.guardStrength == GuardStrength.STEALTH, "숫자 배열을 매번 섞습니다")
+                GuardEffectRow("진동 · 입력 피드백", true, "눈을 보지 않아도 그릴 수 있게 합니다")
+                GuardEffectRow("잠긴 앱 알림 숨김", state.guardPriority != GuardPriority.MONEY, "알림 내용까지 가립니다")
+                GuardEffectRow("패닉 셰이크", state.guardStrength == GuardStrength.STEALTH, "흔들면 즉시 잠급니다")
+            }
+        }
+
         item { SettingsSectionLabel("잠금 수단") }
         item {
             SettingsCard(accent = OneUi.CardSurface) {
@@ -375,7 +446,8 @@ fun LockSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBack
                 )
                 SettingsToggleRow(
                     icon = Icons.Default.PhoneAndroid,
-                    title = "터치 진동",
+                    title = "터치 진동 · 입력 피드백",
+                    subtitle = "패턴 노드를 지날 때마다 틱, 완성 시 thud, 오답 시 둔탁한 경고",
                     tint = OneUi.AccentTint,
                     checked = config.isVibrationEnabled,
                     onCheckedChange = actions.toggleVibration
@@ -1127,6 +1199,81 @@ fun StealthSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onB
             selectedIndex = (config.intruderSelfieThreshold - 1).coerceIn(0, 2),
             onSelect = { actions.changeIntruderThreshold(it + 1); thresholdSheet = false },
             onDismiss = { thresholdSheet = false }
+        )
+    }
+}
+
+/**
+ * 세 가지 질문 중 하나.
+ *
+ * 종이 대신 칩을 쓴다. 긴 설명을 붙이면 선택 자체가 부담이 되기 때문���다.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> PresetChoiceRow(
+    title: String,
+    options: List<Pair<String, T>>,
+    selected: T,
+    onSelect: (T) -> Unit
+) {
+    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+        Text(title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { (label, value) ->
+                val isSelected = value == selected
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(if (isSelected) OneUi.AccentTint else OneUi.RowSurface)
+                        .clickable { onSelect(value) }
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
+                ) {
+                    Text(
+                        label,
+                        color = if (isSelected) Color.Black else TextSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 자동 설정 결과로 어떤 스위치가 켜지는지 보여 주는 행. */
+@Composable
+private fun GuardEffectRow(label: String, on: Boolean, why: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(if (on) OneUi.OkTint else OneUi.Divider)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                color = if (on) TextPrimary else TextSecondary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(why, color = TextSecondary, fontSize = 11.sp, lineHeight = 15.sp)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            if (on) "켜짐" else "꺼짐",
+            color = if (on) OneUi.OkTint else TextSecondary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
         )
     }
 }

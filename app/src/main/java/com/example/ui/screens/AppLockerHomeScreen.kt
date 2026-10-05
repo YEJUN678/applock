@@ -273,6 +273,12 @@ fun AppLockerHomeScreen(
     failsafeWipeVault: Boolean = true,
     failsafeFailuresRequired: Int = 5,
     aiCallsRemaining: Int = 0,
+    guardProfile: com.example.model.GuardProfile = com.example.model.GuardProfile.FAMILY,
+    guardStrength: com.example.model.GuardStrength = com.example.model.GuardStrength.NORMAL,
+    guardPriority: com.example.model.GuardPriority = com.example.model.GuardPriority.MESSENGER,
+    changeGuardProfile: (com.example.model.GuardProfile) -> Unit = {},
+    changeGuardStrength: (com.example.model.GuardStrength) -> Unit = {},
+    changeGuardPriority: (com.example.model.GuardPriority) -> Unit = {},
     openNotificationInbox: () -> Unit = {},
     configureFailsafe: () -> Unit = {},
     setFailsafeEnabled: (Boolean) -> Unit = {},
@@ -1104,6 +1110,12 @@ fun AppLockerHomeScreen(
                             setFailsafeWipeVault = setFailsafeWipeVault,
                             setFailsafeFailures = setFailsafeFailures,
                             aiCallsRemaining = aiCallsRemaining,
+                            guardProfile = guardProfile,
+                            guardStrength = guardStrength,
+                            guardPriority = guardPriority,
+                            changeGuardProfile = changeGuardProfile,
+                            changeGuardStrength = changeGuardStrength,
+                            changeGuardPriority = changeGuardPriority,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
@@ -1347,6 +1359,12 @@ fun SettingsView(
     failsafeWipeVault: Boolean = true,
     failsafeFailuresRequired: Int = 5,
     aiCallsRemaining: Int = 0,
+    guardProfile: com.example.model.GuardProfile = com.example.model.GuardProfile.FAMILY,
+    guardStrength: com.example.model.GuardStrength = com.example.model.GuardStrength.NORMAL,
+    guardPriority: com.example.model.GuardPriority = com.example.model.GuardPriority.MESSENGER,
+    changeGuardProfile: (com.example.model.GuardProfile) -> Unit = {},
+    changeGuardStrength: (com.example.model.GuardStrength) -> Unit = {},
+    changeGuardPriority: (com.example.model.GuardPriority) -> Unit = {},
     openNotificationInbox: () -> Unit = {},
     configureFailsafe: () -> Unit = {},
     setFailsafeEnabled: (Boolean) -> Unit = {},
@@ -1390,7 +1408,10 @@ fun SettingsView(
         failsafeEnabled = failsafeEnabled,
         failsafeWipeVault = failsafeWipeVault,
         failsafeFailuresRequired = failsafeFailuresRequired,
-        aiCallsRemaining = aiCallsRemaining
+        aiCallsRemaining = aiCallsRemaining,
+        guardProfile = guardProfile,
+        guardStrength = guardStrength,
+        guardPriority = guardPriority
     )
 
     val actions = SettingsUiActions(

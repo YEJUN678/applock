@@ -81,6 +81,7 @@ import com.example.util.ScreenBlockStore
 import com.example.util.LockReasonStore
 import com.example.util.NotificationInbox
 import com.example.util.NotificationSummaryQueue
+import com.example.util.GuardPresetStore
 import com.example.util.RecoveryFailsafe
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -115,6 +116,26 @@ class MainActivity : FragmentActivity() {
 
     fun openNotificationInbox() {
         showNotificationInbox = true
+    }
+
+    /**
+     * 세 가지 답을 실제 잠금 설정에 반영한다.
+     * 한 번만 자동 적용하고 그 뒤로는 사용자가 직접 관리한다(덮어쓰지 않는다).
+     */
+    fun applyGuardPresetIfNeeded(
+        profile: com.example.model.GuardProfile,
+        strength: com.example.model.GuardStrength,
+        priority: com.example.model.GuardPriority
+    ) {
+        if (GuardPresetStore.alreadyApplied(this)) {
+            Toast.makeText(this, "이미 자동 설정을 적용했습니다. 아래 스위치를 직접 조정해 주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val current = AppLockPreferences.getLockConfig(this)
+        val updated = GuardPresetStore.apply(this, current, profile, strength, priority)
+        AppLockPreferences.saveLockConfig(this, updated)
+        GuardPresetStore.markApplied(this)
+        Toast.makeText(this, "답에 맞춰 잠금 설정을 맞췄습니다.", Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -1367,6 +1388,21 @@ fun AppLockerApp(
                 failsafeWipeVault = RecoveryFailsafe.shouldWipeVault(context),
                 failsafeFailuresRequired = RecoveryFailsafe.failuresRequired(context),
                 aiCallsRemaining = NotificationSummaryQueue.remainingCalls(context),
+                guardProfile = GuardPresetStore.profile(context),
+                guardStrength = GuardPresetStore.strength(context),
+                guardPriority = GuardPresetStore.priority(context),
+                changeGuardProfile = { value ->
+                    GuardPresetStore.setProfile(context, value)
+                    (context as? MainActivity)?.applyGuardPresetIfNeeded(value, GuardPresetStore.strength(context), GuardPresetStore.priority(context))
+                },
+                changeGuardStrength = { value ->
+                    GuardPresetStore.setStrength(context, value)
+                    (context as? MainActivity)?.applyGuardPresetIfNeeded(GuardPresetStore.profile(context), value, GuardPresetStore.priority(context))
+                },
+                changeGuardPriority = { value ->
+                    GuardPresetStore.setPriority(context, value)
+                    (context as? MainActivity)?.applyGuardPresetIfNeeded(GuardPresetStore.profile(context), GuardPresetStore.strength(context), value)
+                },
                 openNotificationInbox = { (context as? MainActivity)?.openNotificationInbox() },
                 configureFailsafe = { (context as? MainActivity)?.showFailsafeSetup() },
                 setFailsafeEnabled = { enabled -> RecoveryFailsafe.setEnabled(context, enabled) },
