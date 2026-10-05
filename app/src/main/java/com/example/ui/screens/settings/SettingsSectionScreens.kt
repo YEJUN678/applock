@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.HealthAndSafety
@@ -778,6 +780,39 @@ fun VaultSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBac
                     tint = OneUi.DangerTint,
                     showChevron = true,
                     onClick = actions.clearSessionLog
+                )
+            }
+        }
+
+        item {
+            SettingsRow(
+                icon = Icons.Default.MarkEmailRead,
+                title = "알림 모아 보기",
+                subtitle = if (state.notificationInboxUnread > 0) {
+                    "안 읽은 알림 ${state.notificationInboxUnread}건"
+                } else {
+                    "잠긴 앱 알림을 모아 둡니다"
+                },
+                tint = if (state.notificationInboxUnread > 0) OneUi.AccentTint else OneUi.InfoTint,
+                showChevron = true,
+                onClick = actions.openNotificationInbox
+            )
+        }
+
+        item { SettingsSectionLabel("복구 · 비상") }
+        item {
+            SettingsCard(accent = OneUi.CardSurface) {
+                SettingsRow(
+                    icon = Icons.Default.ReportProblem,
+                    title = "비상 해제 (매우 위험)",
+                    subtitle = if (state.failsafeEnabled) {
+                        "켜짐 · 복구 수단이 모두 실패하면 금고 데이터 삭제 후 잠금 해제"
+                    } else {
+                        "꺼짐"
+                    },
+                    tint = if (state.failsafeEnabled) OneUi.DangerTint else OneUi.WarnTint,
+                    showChevron = true,
+                    onClick = actions.configureFailsafe
                 )
             }
         }

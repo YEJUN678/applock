@@ -43,6 +43,7 @@ import com.example.util.IntruderLocationCapture
 import com.example.util.CaptureLocation
 import com.example.util.RecoveryKeyManager
 import com.example.ui.components.RecoveryVerifyDialog
+import com.example.util.RecoveryFailsafe
 import com.example.ui.components.RecoveryMethodChooserDialog
 import com.example.ui.components.RecoveryKeyVerifyDialog
 
@@ -130,6 +131,63 @@ class LockActivity : FragmentActivity() {
             }
             .setNegativeButton("취소") { _, _ -> showRecoveryVerify = false }
             .show()
+    }
+
+    /**
+     * 마지막 수단 안내.
+     *
+     * 복구키와 복구 질문이 모두 실패한 상태에서만 뜨며,
+     * 금고 데이터를 지우고 잠금을 푸는 방법을 설명한다. 여기서 확정해야 실행된다.
+     */
+    private fun showFailsafePrompt() {
+        val wipeVault = RecoveryFailsafe.shouldWipeVault(this)
+        val wipeNotes = RecoveryFailsafe.shouldWipeNotes(this)
+        android.app.AlertDialog.Builder(this)
+            .setTitle("잠금을 잊으셨나요?")
+            .setMessage(RecoveryFailsafe.warningText(wipeVault, wipeNotes))
+            .setPositiveButton("데이터 지우고 잠금 풀기") { _, _ ->
+                val wipedVault = if (wipeVault) deleteDirectoryForFailsafe(java.io.File(filesDir, "secure_vault_files")) else false
+                val wipedNotes = if (wipeNotes) deleteDirectoryForFailsafe(java.io.File(filesDir, "secure_notes")) else false
+                RecoveryFailsafe.setEnabled(this, false)
+                AppLockPreferences.clearFailedAttempts(this)
+                // 침입 기록에 남긴다. "비상 해제가 쓰였다"는 사실은 중요하다.
+                runCatching {
+                    AppLockPreferences.recordIntruderAttempt(
+                        context = this,
+                        packageName = targetPackage,
+                        appName = appName,
+                        attempts = 0,
+                        usedLockType = "비상 해제 (금고 데이터 삭제${if (wipedVault) ", 금고 삭제됨" else ""}${if (wipedNotes) ", 메모 삭제됨" else ""})"
+                    )
+                }
+                val message = buildString {
+                    append("잠금을 풀었습니다.\n\n")
+                    if (wipedVault) append("금고의 파일이 삭제되었습니다.\n")
+                    if (wipedNotes) append("보안 메모가 삭제되었습니다.\n")
+                    if (!wipedVault && !wipedNotes) append("데이터는 삭제되지 않았습니다.\n")
+                    append("\n이 기능은 자동으로 꺼졌습니다. 다시 쓰려면 설정에서 켜 주세요.")
+                }
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("비상 해제 완료")
+                    .setMessage(message)
+                    .setPositiveButton("확인") { _, _ ->
+                        completeUnlock()
+                    }
+                    .setOnCancelListener { }
+                    .show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun deleteDirectoryForFailsafe(dir: java.io.File): Boolean {
+        if (!dir.exists()) return false
+        var any = false
+        dir.listFiles()?.forEach { file ->
+            if (file.isDirectory) any = deleteDirectoryForFailsafe(file) || any
+            else any = file.delete() || any
+        }
+        return any
     }
 
     /** 기록에 남길 해제 방식. 인증 분기마다 갱신된다. */
@@ -252,7 +310,12 @@ class LockActivity : FragmentActivity() {
                                     showRecoveredDialog("복구키 인증 완료", "복구키로 인증되었습니다. 지금 잠금 비밀번호를 새로 설정하는 것을 강력히 권장합니다.")
                                 } else {
                                     val attempts = RecoveryKeyManager.failedAttempts(this@LockActivity)
+                                    // 다른 수단으로는 열 수 없는 상태가 반복됐다는 뜻이므로 센다.
+                                    AppLockPreferences.registerRecoveryFailure()
                                     Toast.makeText(this@LockActivity, "복구키가 일치하지 않습니다. (누적 ${attempts}회)", Toast.LENGTH_SHORT).show()
+                                    if (RecoveryFailsafe.isEnabled(this@LockActivity)) {
+                                        showFailsafePrompt()
+                                    }
                                 }
                             },
                             onDismiss = { recoveryStep = RecoveryStep.CHOOSER }
@@ -298,12 +361,18 @@ class LockActivity : FragmentActivity() {
                                     showRecoveredDialog("복구 인증 완료", "개인 확인 질문으로 인증되었습니다. 지금 잠금 비밀번호를 새로 설정하는 것을 강력히 권장합니다.")
                                 } else {
                                     val locked = RecoveryQuestionManager.registerFailure(this@LockActivity)
+                                    // 다른 수단으로는 열 수 없는 상태가 반복됐다는 뜻이므로 센다.
+                                    AppLockPreferences.registerRecoveryFailure()
                                     Toast.makeText(
                                         this@LockActivity,
                                         if (locked) "답이 일치하지 않습니다. 복구 시도가 잠겨 1시간 동안 사용할 수 없습니다."
                                         else "답이 일치하지 않습니다.",
                                         Toast.LENGTH_LONG
                                     ).show()
+                                    // 마지막 수단이 켜져 있으면 지금이 그때다.
+                                    if (RecoveryFailsafe.isEnabled(this@LockActivity)) {
+                                        showFailsafePrompt()
+                                    }
                                 }
                             },
                             onDismiss = { recoveryStep = RecoveryStep.CHOOSER }

@@ -260,6 +260,15 @@ fun AppLockerHomeScreen(
     deleteEvidenceOlderThan: (Int) -> Unit = {},
     deleteAllEvidence: () -> Unit = {},
     changeSessionRetention: (Int) -> Unit = {},
+    notificationInboxUnread: Int = 0,
+    failsafeEnabled: Boolean = false,
+    failsafeWipeVault: Boolean = true,
+    failsafeFailuresRequired: Int = 5,
+    openNotificationInbox: () -> Unit = {},
+    configureFailsafe: () -> Unit = {},
+    setFailsafeEnabled: (Boolean) -> Unit = {},
+    setFailsafeWipeVault: (Boolean) -> Unit = {},
+    setFailsafeFailures: (Int) -> Unit = {},
     isDuressMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -1058,6 +1067,15 @@ fun AppLockerHomeScreen(
                             deleteEvidenceOlderThan = deleteEvidenceOlderThan,
                             deleteAllEvidence = deleteAllEvidence,
                             changeSessionRetention = changeSessionRetention,
+                            notificationInboxUnread = notificationInboxUnread,
+                            failsafeEnabled = failsafeEnabled,
+                            failsafeWipeVault = failsafeWipeVault,
+                            failsafeFailuresRequired = failsafeFailuresRequired,
+                            openNotificationInbox = openNotificationInbox,
+                            configureFailsafe = configureFailsafe,
+                            setFailsafeEnabled = setFailsafeEnabled,
+                            setFailsafeWipeVault = setFailsafeWipeVault,
+                            setFailsafeFailures = setFailsafeFailures,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
@@ -1294,7 +1312,16 @@ fun SettingsView(
     openStorageManager: () -> Unit = {},
     deleteEvidenceOlderThan: (Int) -> Unit = {},
     deleteAllEvidence: () -> Unit = {},
-    changeSessionRetention: (Int) -> Unit = {}
+    changeSessionRetention: (Int) -> Unit = {},
+    notificationInboxUnread: Int = 0,
+    failsafeEnabled: Boolean = false,
+    failsafeWipeVault: Boolean = true,
+    failsafeFailuresRequired: Int = 5,
+    openNotificationInbox: () -> Unit = {},
+    configureFailsafe: () -> Unit = {},
+    setFailsafeEnabled: (Boolean) -> Unit = {},
+    setFailsafeWipeVault: (Boolean) -> Unit = {},
+    setFailsafeFailures: (Int) -> Unit = {}
 ) {
     val state = SettingsUiState(
         lockConfig = lockConfig,
@@ -1328,7 +1355,11 @@ fun SettingsView(
         storageEvidenceText = storageEvidenceText,
         sessionRetentionDays = sessionRetentionDays,
         privacyShadeAutoApps = privacyShadeAutoApps,
-        lockedWithReasonCount = lockedWithReasonCount
+        lockedWithReasonCount = lockedWithReasonCount,
+        notificationInboxUnread = notificationInboxUnread,
+        failsafeEnabled = failsafeEnabled,
+        failsafeWipeVault = failsafeWipeVault,
+        failsafeFailuresRequired = failsafeFailuresRequired
     )
 
     val actions = SettingsUiActions(
@@ -1352,6 +1383,11 @@ fun SettingsView(
         deleteEvidenceOlderThan = deleteEvidenceOlderThan,
         deleteAllEvidence = deleteAllEvidence,
         changeSessionRetention = changeSessionRetention,
+        openNotificationInbox = openNotificationInbox,
+        configureFailsafe = configureFailsafe,
+        setFailsafeEnabled = setFailsafeEnabled,
+        setFailsafeWipeVault = setFailsafeWipeVault,
+        setFailsafeFailures = setFailsafeFailures,
         toggleAppSelfProtect = onToggleAppSelfProtect,
         toggleUninstallProtection = onToggleUninstallProtection,
         toggleScreenOffLock = onToggleScreenOffLock,

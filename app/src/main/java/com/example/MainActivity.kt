@@ -79,6 +79,8 @@ import com.example.ui.screens.StorageManagerScreen
 import com.example.util.SessionReportRenderer
 import com.example.util.ScreenBlockStore
 import com.example.util.LockReasonStore
+import com.example.util.NotificationInbox
+import com.example.util.RecoveryFailsafe
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -100,6 +102,7 @@ class MainActivity : FragmentActivity() {
     private var showScreenBlockManager by mutableStateOf(false)
     private var showSafetyDiagnostic by mutableStateOf(false)
     private var showStorageManager by mutableStateOf(false)
+    private var showNotificationInbox by mutableStateOf(false)
 
     fun openSafetyDiagnostic() {
         showSafetyDiagnostic = true
@@ -107,6 +110,103 @@ class MainActivity : FragmentActivity() {
 
     fun openStorageManager() {
         showStorageManager = true
+    }
+
+    fun openNotificationInbox() {
+        showNotificationInbox = true
+    }
+
+    /**
+     * 비상 해제 설정.
+     *
+     * 켜기 전에 위험을 두 번 확인한다. 잠금이 "자동으로 풀리는" 순간이 생기므로
+     * 명시적 동의 없이는 절대 켤 수 없게 했다.
+     */
+    fun showFailsafeSetup() {
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val wrapper = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+
+        val enabledSwitch = android.widget.Switch(this).apply {
+            text = "비상 해제 켜기"
+            isChecked = RecoveryFailsafe.isEnabled(this@MainActivity)
+            setPadding(0, pad / 4, 0, pad / 4)
+        }
+        val wipeSwitch = android.widget.Switch(this).apply {
+            text = "잠금을 풀기 전에 금고 파일 삭제"
+            isChecked = RecoveryFailsafe.shouldWipeVault(this@MainActivity)
+        }
+        val failuresLabel = android.widget.TextView(this).apply {
+            text = "복구 수단 실패 횟수: ${RecoveryFailsafe.failuresRequired(this@MainActivity)}회"
+        }
+        val failuresPlus = android.widget.Button(this).apply {
+            text = "+1"
+            setOnClickListener {
+                val next = RecoveryFailsafe.failuresRequired(this@MainActivity) + 1
+                RecoveryFailsafe.setFailuresRequired(this@MainActivity, next)
+                failuresLabel.text = "복구 수단 실패 횟수: ${next}회"
+            }
+        }
+        val failuresMinus = android.widget.Button(this).apply {
+            text = "-1"
+            setOnClickListener {
+                val next = RecoveryFailsafe.failuresRequired(this@MainActivity) - 1
+                RecoveryFailsafe.setFailuresRequired(this@MainActivity, next)
+                failuresLabel.text = "복구 수단 실패 횟수: ${RecoveryFailsafe.failuresRequired(this@MainActivity)}회"
+            }
+        }
+        val failureRow = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            addView(failuresLabel)
+            addView(failuresMinus)
+            addView(failuresPlus)
+        }
+
+        wrapper.addView(enabledSwitch)
+        wrapper.addView(wipeSwitch)
+        wrapper.addView(failureRow)
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("비상 해제 설정")
+            .setMessage(
+                "복구키와 복구 질문이 모두 실패한 상태에서만 동작합니다.\n\n" +
+                    "· 켜는 동안 금고 파일을 먼저 지우고 잠금을 풉니다\n" +
+                    "· 침입 기록에 '비상 해제'가 남습니다\n" +
+                    "· 한 번 쓰면 자동으로 꺼집니다"
+            )
+            .setView(wrapper)
+            .setPositiveButton("저장") { _, _ ->
+                val wipe = wipeSwitch.isChecked
+                // 켜려면 위험을 직접 확인한 뒤에만 허용한다.
+                if (enabledSwitch.isChecked) {
+                    confirmFailsafeRisk(wipe)
+                } else {
+                    RecoveryFailsafe.setShouldWipeVault(this, wipe)
+                    RecoveryFailsafe.setEnabled(this, false)
+                    Toast.makeText(this, "비상 해제를 껐습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun confirmFailsafeRisk(wipeVault: Boolean) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("정말 켤까요?")
+            .setMessage(
+                RecoveryFailsafe.warningText(wipeVault, false) +
+                    "\n\n이 위험을 알고 켜시겠습니까?"
+            )
+            .setPositiveButton("네, 위험을 알고 켭니다") { _, _ ->
+                RecoveryFailsafe.setShouldWipeVault(this, wipeVault)
+                RecoveryFailsafe.setEnabled(this, true)
+                Toast.makeText(this, "비상 해제를 켰습니다. 한 번 쓰면 자동으로 꺼집니다.", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     /** 설정 화면에서 "자세히 막기"를 눌렀을 때 호출한다. */
@@ -588,6 +688,11 @@ class MainActivity : FragmentActivity() {
                 if (showScreenBlockManager) {
                     com.example.ui.screens.settings.ScreenBlockManagerScreen(
                         onBack = { showScreenBlockManager = false }
+                    )
+                }
+                if (showNotificationInbox) {
+                    com.example.ui.screens.NotificationInboxScreen(
+                        onBack = { showNotificationInbox = false }
                     )
                 }
                 if (showSafetyDiagnostic) {
@@ -1256,6 +1361,15 @@ fun AppLockerApp(
                 lockedWithReasonCount = LockReasonStore.reasonsWithApps(context).size,
                 openSafetyDiagnostic = { (context as? MainActivity)?.openSafetyDiagnostic() },
                 openStorageManager = { (context as? MainActivity)?.openStorageManager() },
+                notificationInboxUnread = NotificationInbox.unreadCount(context),
+                failsafeEnabled = RecoveryFailsafe.isEnabled(context),
+                failsafeWipeVault = RecoveryFailsafe.shouldWipeVault(context),
+                failsafeFailuresRequired = RecoveryFailsafe.failuresRequired(context),
+                openNotificationInbox = { (context as? MainActivity)?.openNotificationInbox() },
+                configureFailsafe = { (context as? MainActivity)?.showFailsafeSetup() },
+                setFailsafeEnabled = { enabled -> RecoveryFailsafe.setEnabled(context, enabled) },
+                setFailsafeWipeVault = { enabled -> RecoveryFailsafe.setShouldWipeVault(context, enabled) },
+                setFailsafeFailures = { count -> RecoveryFailsafe.setFailuresRequired(context, count) },
                 deleteEvidenceOlderThan = { days ->
                     val deleted = DataStorageManager.deleteEvidenceOlderThan(context, days)
                     onShowToast("증거 ${deleted}개를 지웠습니다.")

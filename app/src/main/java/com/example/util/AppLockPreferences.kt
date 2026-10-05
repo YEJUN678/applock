@@ -187,6 +187,25 @@ object AppLockPreferences {
             .remove(KEY_FAILED_COUNTER)
             .remove(KEY_LOCKOUT_UNTIL)
             .apply()
+        consecutiveFailures = 0
+    }
+
+    /**
+     * 복구 수단(숫자 복구키 · 복구 질문)까지 모두 실패한 횟수.
+     *
+     * 일반 인증 실패와 별개로 센다. 이 값이 쌓인다는 것은
+     * "정상적인 방법으로는 열 수 없는 상태"라는 뜻이기 때문이다.
+     */
+    private var consecutiveFailures: Int = 0
+
+    fun registerRecoveryFailure() {
+        consecutiveFailures++
+    }
+
+    fun recoveryFailureCount(): Int = consecutiveFailures
+
+    fun resetRecoveryFailures() {
+        consecutiveFailures = 0
     }
 
     // --- 앱별 잠금 일정 ---

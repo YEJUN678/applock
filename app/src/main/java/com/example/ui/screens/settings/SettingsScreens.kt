@@ -106,7 +106,11 @@ data class SettingsUiState(
     val storageEvidenceText: String = "0 B",
     val sessionRetentionDays: Int = 0,
     val privacyShadeAutoApps: Int = 0,
-    val lockedWithReasonCount: Int = 0
+    val lockedWithReasonCount: Int = 0,
+    val notificationInboxUnread: Int = 0,
+    val failsafeEnabled: Boolean = false,
+    val failsafeWipeVault: Boolean = true,
+    val failsafeFailuresRequired: Int = 5
 )
 
 /** 설정 화면에서 쓰는 색상 열거형 별칭(UI 층이 util 타입을 직접 다루지 않도록 한다). */
@@ -134,6 +138,11 @@ data class SettingsUiActions(
     val deleteEvidenceOlderThan: (Int) -> Unit = {},
     val deleteAllEvidence: () -> Unit = {},
     val changeSessionRetention: (Int) -> Unit = {},
+    val openNotificationInbox: () -> Unit = {},
+    val configureFailsafe: () -> Unit = {},
+    val setFailsafeEnabled: (Boolean) -> Unit = {},
+    val setFailsafeWipeVault: (Boolean) -> Unit = {},
+    val setFailsafeFailures: (Int) -> Unit = {},
     val toggleAppSelfProtect: (Boolean) -> Unit = {},
     val toggleUninstallProtection: (Boolean) -> Unit = {},
     val toggleScreenOffLock: (Boolean) -> Unit = {},
@@ -311,6 +320,8 @@ private val SEARCH_INDEX = listOf(
     SettingEntry(SettingsSection.VAULT, "암호화 백업", "백업 복원"),
     SettingEntry(SettingsSection.VAULT, "복구 QR", "오프라인 복구"),
     SettingEntry(SettingsSection.VAULT, "클립보드 자동 삭제", "개인정보 클립보드"),
+    SettingEntry(SettingsSection.VAULT, "알림 모아 보기", "알림 inbox 모아보기 안읽음", "잠긴 앱 알림을 모아서 봅니다"),
+    SettingEntry(SettingsSection.VAULT, "비상 해제 (매우 위험)", "비상해제 마지막 수단 복구 실패", "복구가 안 될 때 마지막 수단"),
     SettingEntry(SettingsSection.VAULT, "사용 용량", "저장 공간 용량 정리", "앱이 차지하는 용량"),
     SettingEntry(SettingsSection.VAULT, "오래된 증거 지우기", "자동삭제 오래된 파일", "오래된 증거 파일 정리"),
     SettingEntry(SettingsSection.VAULT, "실행 기록 보관 기간", "보관 기간 자동 삭제", "실행 기록 자동 삭제"),

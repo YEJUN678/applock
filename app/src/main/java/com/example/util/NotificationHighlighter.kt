@@ -94,10 +94,17 @@ object NotificationHighlighter {
         NotificationManagerCompat.from(context).notify(id, built)
         onCancelOriginal?.invoke()
 
+        // 소유자가 나중에 볼 수 있도록 모아 둔다.
+        // 알림을 dismiss 하면 사라져서 "가리는 것"만 있고 "보는 것"이 없어지기 때문.
+        NotificationInbox.add(context, sbn.packageName, appLabel, title, text)
+
         // AI 요약은 네트워크가 필요하므로 알림을 띄운 뒤에 갱신한다.
         val prompt = "$appLabel 알림\n제목: ${title.ifBlank { "(없음)" }}\n내용: ${text.ifBlank { "(없음)" }}"
         Thread {
             val summary = summaryProvider?.invoke(appLabel, prompt)?.takeIf { it.isNotBlank() } ?: return@Thread
+
+            // 모아 둔 목록에도 요약을 붙인다(알림은 이미 떠 있으므로 바로는 안 보인다).
+            NotificationInbox.attachSummary(context, sbn.packageName, title, text, summary)
             val summaryViews = RemoteViews(context.packageName, R.layout.notify_highlight).apply {
                 setTextViewText(R.id.highlight_app, appLabel)
                 setTextViewText(R.id.highlight_title, title.ifBlank { "새 알림" })
