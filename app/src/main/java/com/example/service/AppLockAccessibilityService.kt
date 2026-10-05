@@ -218,7 +218,7 @@ class AppLockAccessibilityService : AccessibilityService() {
      * 같은 화면을 계속 쌓지 않게 약간의 간격을 두지만, 목록이 비면 쓸모가 없으므로 간격은 짧게 둔다.
      */
     private fun recordScreenIfNeeded(packageName: String, event: AccessibilityEvent) {
-        if (AppLockPreferences.isPackageLocked(applicationContext, packageName)) return
+        // 잠긴 앱도 기록한다. 나중에 "앱 전체 잠금"을 풀면 여기 잡힌 화면을 그대로 쓸 수 있다.
         if (packageName == applicationContext.packageName) return
         if (packageName == "com.android.systemui" || packageName == "android") return
         if (AppLockPermissionHelper.isInputMethodPackage(applicationContext, packageName)) return

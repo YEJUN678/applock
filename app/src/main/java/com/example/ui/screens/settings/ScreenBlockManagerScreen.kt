@@ -45,9 +45,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.AppItem
 import com.example.ui.theme.OneUi
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.util.InstalledAppsManager
 import com.example.util.ScreenBlockStore
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -69,7 +71,34 @@ fun ScreenBlockManagerScreen(
     // 앱을 누르면 그 앱의 화면 목록으로 내려간다.
     var selectedApp by remember { mutableStateOf<String?>(null) }
 
-    val apps = remember(refreshKey.value) { ScreenBlockStore.appsWithScreens(context) }
+    // 설치된 앱 전체를 불러온다. 기록이 없는 앱도 목록에 있어야
+// "어떤 앱을 막을 수 있지?"를 전체에서 고를 수 있다.
+    var installedApps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
+    androidx.compose.runtime.LaunchedEffect(refreshKey.value) {
+        installedApps = runCatching {
+            InstalledAppsManager.loadInstalledApps(context, emptySet())
+        }.getOrDefault(emptyList())
+    }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val recordedApps = remember(refreshKey.value) { ScreenBlockStore.appsWithScreens(context) }
+    // 기록이 있는 앱을 먼저, 그다음 나머지 설치 앱을 알파벳 순으로 붙인다.
+    val apps = remember(recordedApps, installedApps, searchQuery) {
+        val byPackage = installedApps.associateBy { it.packageName }
+        val recorded = recordedApps.mapNotNull { (pkg, name) ->
+            val item = byPackage[pkg] ?: return@mapNotNull Triple(pkg, name, 1)
+            Triple(pkg, item.name.ifBlank { name }, 1)
+        }
+        val rest = installedApps
+            .filter { installed -> recordedApps.none { it.first == installed.packageName } }
+            .map { Triple(it.packageName, it.name, 0) }
+            .sortedBy { it.second }
+        val all = recorded + rest
+        if (searchQuery.isBlank()) all
+        else all.filter {
+            it.second.contains(searchQuery, true) || it.first.contains(searchQuery, true)
+        }
+    }
     val totalBlocked = remember(refreshKey.value) { ScreenBlockStore.blockedCount(context) }
     val accessibilityOn = remember(refreshKey.value) {
         AppLockPermissionHelperBridge.hasAccessibilityPermission(context)
@@ -96,7 +125,11 @@ fun ScreenBlockManagerScreen(
             Column(Modifier.weight(1f)) {
                 Text("자세히 막기", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                 Text(
-                    if (totalBlocked > 0) "앱 ${apps.size}개 · 화면 ${totalBlocked}개 잠금" else "아직 막은 화면이 없습니다",
+                    if (totalBlocked > 0) {
+                        "설치 ${installedApps.size}개 앱 중 화면 ${totalBlocked}개 잠금"
+                    } else {
+                        "설치된 앱 ${installedApps.size}개 중 화면을 골라 잠글 수 있습니다"
+                    },
                     color = TextSecondary,
                     fontSize = 12.sp
                 )
@@ -137,28 +170,65 @@ fun ScreenBlockManagerScreen(
                 }
             }
 
+            // 앱 검색
+            item {
+                androidx.compose.material3.OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    singleLine = true,
+                    placeholder = { Text("앱 검색 (예: 카톡, 은행)", color = TextSecondary, fontSize = 13.sp) },
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = OneUi.AccentTint,
+                        unfocusedBorderColor = OneUi.Divider,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        cursorColor = OneUi.AccentTint
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             if (apps.isEmpty()) {
                 item { EmptyScreenCard() }
             } else {
-                item { SectionLabelText("막을 수 있는 앱") }
-                items(apps) { (packageName, appName) ->
-                    val blockedInApp = remember(refreshKey.value, packageName) {
-                        ScreenBlockStore.screensOf(context, packageName).count { it.blocked }
+                val recorded = apps.filter { it.third == 1 }
+                if (recorded.isNotEmpty()) {
+                    item { SectionLabelText("화면 기록이 있는 앱 ${recorded.size}개") }
+                    items(recorded) { (packageName, appName, _) ->
+                        AppRow(
+                            appName = appName.ifBlank { packageName },
+                            screenCount = ScreenBlockStore.screensOf(context, packageName).size,
+                            blockedCount = remember(refreshKey.value, packageName) {
+                                ScreenBlockStore.screensOf(context, packageName).count { it.blocked }
+                            },
+                            onClick = { selectedApp = packageName }
+                        )
                     }
-                    AppRow(
-                        appName = appName.ifBlank { packageName },
-                        screenCount = ScreenBlockStore.screensOf(context, packageName).size,
-                        blockedCount = blockedInApp,
-                        onClick = { selectedApp = packageName }
-                    )
                 }
-                item {
-                    Text(
-                        "각 앱을 눌러 내부 화면을 고릅니다.",
-                        color = TextSecondary,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+
+                val unrecorded = apps.filter { it.third == 0 }
+                if (unrecorded.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(4.dp))
+                        SectionLabelText("아직 화면 기록이 없는 앱 ${unrecorded.size}개")
+                    }
+                    items(unrecorded) { (packageName, appName, _) ->
+                        AppRow(
+                            appName = appName.ifBlank { packageName },
+                            screenCount = 0,
+                            blockedCount = 0,
+                            onClick = { selectedApp = packageName }
+                        )
+                    }
+                    item {
+                        Text(
+                            "기록이 없는 앱은 화면 목록이 비어 있습니다. 그 앱을 잠금 없이 평소대로 쓰고 돌아오면 본 화면이 쌓입니다.",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
             }
         }
@@ -333,10 +403,10 @@ private fun EmptyScreenCard() {
     ) {
         Icon(Icons.Default.AccountTree, contentDescription = null, tint = OneUi.AccentTint, modifier = Modifier.size(34.dp))
         Spacer(Modifier.height(12.dp))
-        Text("아직 기록된 화면이 없습니다", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text("앱을 찾을 수 없습니다", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Text(
-            "잠그지 않은 앱(카톡, 은행 등)을 평소대로 사용해 보세요.\n사용자가 직접 본 화면만 목록에 올라옵니다.",
+            "설치된 앱 목록을 불러오는 중일 수 있습니다. 잠시 뒤 다시 열어 주세요.",
             color = TextSecondary,
             fontSize = 12.sp,
             lineHeight = 17.sp
