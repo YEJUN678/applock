@@ -25,6 +25,7 @@ object SessionReportRenderer {
     private const val ROW_HEIGHT = 96
     private const val HEADER_HEIGHT = 560
     private const val CHART_HEIGHT = 300
+    private const val REASON_ROW_HEIGHT = 62
 
     // 팔레트는 Int 상수로 둔다(Color(0x...)는 이 파일 빌드에서 해석이 불안정하다)
     private const val C_BG = 0xFF0B1220.toInt()
@@ -48,10 +49,15 @@ object SessionReportRenderer {
         totalAppCount: Int,
         dayCounts: List<Pair<String, Int>>,
         topApps: List<Pair<String, Int>>,
+        /** (앱 이름, 잠근 사유). 비어 있으면 이 구역 자체가 그려지지 않는다. */
+        lockReasons: List<Pair<String, String>> = emptyList(),
         aiSummary: String? = null
     ): File? = runCatching {
         val rows = topApps.take(6)
-        val height = HEADER_HEIGHT + CHART_HEIGHT + 90 + rows.size * ROW_HEIGHT + (if (aiSummary.isNullOrBlank()) 0 else 200) + 140
+        val reasonRows = lockReasons.take(8)
+        val height = HEADER_HEIGHT + CHART_HEIGHT + 90 + rows.size * ROW_HEIGHT +
+            (if (reasonRows.isEmpty()) 0 else 90 + reasonRows.size * REASON_ROW_HEIGHT) +
+            (if (aiSummary.isNullOrBlank()) 0 else 200) + 140
 
         val bitmap = Bitmap.createBitmap(WIDTH, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -176,6 +182,38 @@ object SessionReportRenderer {
             }
         }
 
+        // --- 잠근 사유 ---
+        // "왜 잠갔는가" 를 남겨 두지 않으면 숫자만 보이기 때문에 리포트가два anonim하다.
+        if (reasonRows.isNotEmpty()) {
+            y += 24f
+            paint.color = C_TEXT2
+            paint.textSize = 30f
+            paint.isFakeBoldText = true
+            canvas.drawText("잠근 사유", 60f, y, paint)
+            y += 34f
+
+            reasonRows.forEach { (appName, reason) ->
+                rect.set(60f, y, (WIDTH - 60f).toFloat(), y + REASON_ROW_HEIGHT - 12f)
+                paint.color = C_CARD
+                canvas.drawRoundRect(rect, 18f, 18f, paint)
+
+                paint.color = C_TEXT
+                paint.textSize = 25f
+                paint.isFakeBoldText = true
+                paint.textAlign = Paint.Align.LEFT
+                canvas.drawText(ellipsize(appName, 12), 92f, y + 36f, paint)
+
+                // 사유는 카드 안쪽에 작게 붙인다.
+                paint.color = C_SUB
+                paint.textSize = 23f
+                paint.isFakeBoldText = false
+                canvas.drawText(ellipsize(reason, 26), 300f, y + 36f, paint)
+
+                y += REASON_ROW_HEIGHT
+            }
+            y += 10f
+        }
+
         // --- AI 요약 ---
         if (!aiSummary.isNullOrBlank()) {
             y += 24f
@@ -206,6 +244,10 @@ object SessionReportRenderer {
 
         saveToGallery(context, bitmap)
     }.getOrNull()
+
+    /** 카드 폭에 들어맞게 자른다. */
+    private fun ellipsize(text: String, maxChars: Int): String =
+        if (text.length <= maxChars) text else text.take(maxChars - 1) + "…"
 
     private fun saveToGallery(context: Context, bitmap: Bitmap): File? {
         val name = "lock_session_${System.currentTimeMillis()}.png"

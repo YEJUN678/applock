@@ -88,10 +88,24 @@ object LockReasonStore {
         prefs(context).edit().putString(KEY_PREFIX + packageName, reason.trim()).apply()
     }
 
-    /** 메모가 달린 잠긴 앱 목록 (사유 → 앱 목록 통계에 쓴다). */
+    /**
+     * 메모가 달린 잠긴 앱 목록.
+     *
+     * 잠금을 해제하면 메모가 따라다니지 않도록, 잠긴 앱만 대상으로 삼는다.
+     * 그래야 "왜 잠갔는지" 라는 기록의 의미가 유지된다.
+     */
     fun reasonsWithApps(context: Context): List<Pair<String, String>> {
         val locked = AppLockPreferences.getLockedPackages(context)
         return locked.map { it to reasonOf(context, it) }.filter { it.second.isNotBlank() }
+    }
+
+    /** 잠그지 않았는데 메모가 남아 있는 앱 (사용자가 잠금을 풀었을 때 생긴다). */
+    fun staleReasons(context: Context): List<String> {
+        val locked = AppLockPreferences.getLockedPackages(context)
+        return prefs(context).all.keys
+            .filter { it.startsWith(KEY_PREFIX) }
+            .map { it.removePrefix(KEY_PREFIX) }
+            .filter { pkg -> pkg !in locked }
     }
 
     private fun prefs(context: Context) =

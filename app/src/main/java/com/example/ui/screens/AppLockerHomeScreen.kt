@@ -279,6 +279,9 @@ fun AppLockerHomeScreen(
     changeGuardProfile: (com.example.model.GuardProfile) -> Unit = {},
     changeGuardStrength: (com.example.model.GuardStrength) -> Unit = {},
     changeGuardPriority: (com.example.model.GuardPriority) -> Unit = {},
+    openLockReasons: () -> Unit = {},
+    updateLockReason: (String, String) -> Unit = { _, _ -> },
+    lockReasonStaleCount: Int = 0,
     openNotificationInbox: () -> Unit = {},
     configureFailsafe: () -> Unit = {},
     setFailsafeEnabled: (Boolean) -> Unit = {},
@@ -1116,6 +1119,9 @@ fun AppLockerHomeScreen(
                             changeGuardProfile = changeGuardProfile,
                             changeGuardStrength = changeGuardStrength,
                             changeGuardPriority = changeGuardPriority,
+                            openLockReasons = openLockReasons,
+                            updateLockReason = updateLockReason,
+                            lockReasonStaleCount = lockReasonStaleCount,
                             isFaceDownProtectionEnabled = isFaceDownProtectionEnabled,
                             onToggleFaceDownProtection = onToggleFaceDownProtection,
                             onToggleRandomPin = {
@@ -1365,6 +1371,9 @@ fun SettingsView(
     changeGuardProfile: (com.example.model.GuardProfile) -> Unit = {},
     changeGuardStrength: (com.example.model.GuardStrength) -> Unit = {},
     changeGuardPriority: (com.example.model.GuardPriority) -> Unit = {},
+    openLockReasons: () -> Unit = {},
+    updateLockReason: (String, String) -> Unit = { _, _ -> },
+    lockReasonStaleCount: Int = 0,
     openNotificationInbox: () -> Unit = {},
     configureFailsafe: () -> Unit = {},
     setFailsafeEnabled: (Boolean) -> Unit = {},
@@ -1411,7 +1420,8 @@ fun SettingsView(
         aiCallsRemaining = aiCallsRemaining,
         guardProfile = guardProfile,
         guardStrength = guardStrength,
-        guardPriority = guardPriority
+        guardPriority = guardPriority,
+        staleReasonCount = lockReasonStaleCount
     )
 
     val actions = SettingsUiActions(

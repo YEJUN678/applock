@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.AutoDelete
 import androidx.compose.material.icons.filled.HistoryToggleOff
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.AddPhotoAlternate
@@ -888,6 +889,21 @@ fun VaultSectionScreen(state: SettingsUiState, actions: SettingsUiActions, onBac
                     onClick = actions.configureFailsafe
                 )
             }
+        }
+
+        item {
+            SettingsRow(
+                icon = Icons.Default.StickyNote2,
+                title = "잠근 사유 모아 보기",
+                subtitle = if (state.lockedWithReasonCount == 0) {
+                    "아직 사유를 남긴 앱이 없습니다"
+                } else {
+                    "${state.lockedWithReasonCount}개 앱에 사유가 있습니다"
+                },
+                tint = if (state.lockedWithReasonCount > 0) OneUi.WarnTint else OneUi.InfoTint,
+                showChevron = true,
+                onClick = actions.openLockReasons
+            )
         }
 
         item { SettingsSectionLabel("저장 공간") }

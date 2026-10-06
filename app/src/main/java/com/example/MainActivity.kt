@@ -105,6 +105,7 @@ class MainActivity : FragmentActivity() {
     private var showSafetyDiagnostic by mutableStateOf(false)
     private var showStorageManager by mutableStateOf(false)
     private var showNotificationInbox by mutableStateOf(false)
+    private var showLockReasons by mutableStateOf(false)
 
     fun openSafetyDiagnostic() {
         showSafetyDiagnostic = true
@@ -112,6 +113,10 @@ class MainActivity : FragmentActivity() {
 
     fun openStorageManager() {
         showStorageManager = true
+    }
+
+    fun openLockReasons() {
+        showLockReasons = true
     }
 
     fun openNotificationInbox() {
@@ -606,6 +611,31 @@ class MainActivity : FragmentActivity() {
                     appendLine("총 ${sessions.size}회 해제, 잠긴 앱 ${lockedCount}개.")
                     appendLine("일자별: " + dayCounts.joinToString(", ") { "${it.first} ${it.second}회" })
                     append("자주 연 앱: " + topApps.joinToString(", ") { "${it.first} ${it.second}회" })
+
+                    // 잠근 이유가 있으면 근거로 넘긴다. "왜 잠갔는가" 가 있어야 요약이 말이 된다.
+                    val reasons = LockReasonStore.reasonsWithApps(this@MainActivity)
+                    if (reasons.isNotEmpty()) {
+                        appendLine()
+                        appendLine("사용자가 기록한 잠근 사유:")
+                        reasons.forEach { (pkg, reason) ->
+                            val label = runCatching {
+                                val pm = packageManager
+                                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                            }.getOrDefault(pkg)
+                            appendLine("- $label: $reason")
+                        }
+                    }
+
+                    // 심야 해제는 사람이 아닌 타이밍일 가능성이 높으므로 사실만 덧붙인다.
+                    val lateNight = sessions.count {
+                        val cal = java.util.Calendar.getInstance().apply { timeInMillis = it.timestamp }
+                        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                        hour >= 23 || hour < 4
+                    }
+                    if (lateNight > 0) {
+                        appendLine()
+                        appendLine("밤 11시~새벽 4시 해제가 ${lateNight}회 있었다.")
+                    }
                 }
                 when (val result = GeminiClient.ask(this, "$facts\n\n위 통계를 한국어 3줄 안으로 요약하라. 판단이나 조언 없이 숫자 사실만 정리하라.")) {
                     is GeminiClient.Result.Success -> result.text
@@ -620,6 +650,13 @@ class MainActivity : FragmentActivity() {
                 totalAppCount = countLaunchableApps(),
                 dayCounts = dayCounts,
                 topApps = topApps,
+                lockReasons = LockReasonStore.reasonsWithApps(this@MainActivity).map { (pkg, reason) ->
+                    val label = runCatching {
+                        val pm = packageManager
+                        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                    }.getOrDefault(pkg)
+                    label to reason
+                },
                 aiSummary = summary
             )
             runOnUiThread {
@@ -710,6 +747,12 @@ class MainActivity : FragmentActivity() {
                 if (showScreenBlockManager) {
                     com.example.ui.screens.settings.ScreenBlockManagerScreen(
                         onBack = { showScreenBlockManager = false }
+                    )
+                }
+                if (showLockReasons) {
+                    com.example.ui.screens.LockReasonScreen(
+                        onBack = { showLockReasons = false },
+                        onUpdate = { pkg, reason -> LockReasonStore.setReason(this@MainActivity, pkg, reason) }
                     )
                 }
                 if (showNotificationInbox) {
@@ -1404,6 +1447,9 @@ fun AppLockerApp(
                     (context as? MainActivity)?.applyGuardPresetIfNeeded(GuardPresetStore.profile(context), GuardPresetStore.strength(context), value)
                 },
                 openNotificationInbox = { (context as? MainActivity)?.openNotificationInbox() },
+                openLockReasons = { (context as? MainActivity)?.openLockReasons() },
+                updateLockReason = { pkg, reason -> LockReasonStore.setReason(context, pkg, reason) },
+                lockReasonStaleCount = LockReasonStore.staleReasons(context).size,
                 configureFailsafe = { (context as? MainActivity)?.showFailsafeSetup() },
                 setFailsafeEnabled = { enabled -> RecoveryFailsafe.setEnabled(context, enabled) },
                 setFailsafeWipeVault = { enabled -> RecoveryFailsafe.setShouldWipeVault(context, enabled) },

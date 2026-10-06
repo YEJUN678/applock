@@ -133,7 +133,15 @@ object NotificationHighlighter {
     ): Notification {
         ensureChannel(context)
         val hasSummary = !summary.isNullOrBlank()
-        val views = RemoteViews(context.packageName, R.layout.notify_highlight).apply {
+
+        // 접힌 상태는 64dp 로 고정이라 짧은 레이아웃을 써야 글자가 잘리지 않는다.
+        val collapsed = RemoteViews(context.packageName, R.layout.notify_highlight).apply {
+            setTextViewText(R.id.highlight_title, title.ifBlank { "새 알림" })
+            setTextViewText(R.id.highlight_text, text.ifBlank { appLabel })
+        }
+
+        // 펼친 상태에만 앱 이름·배지·요약을 보여 준다.
+        val expanded = RemoteViews(context.packageName, R.layout.notify_highlight_big).apply {
             setTextViewText(R.id.highlight_app, appLabel)
             setTextViewText(R.id.highlight_title, title.ifBlank { "새 알림" })
             setTextViewText(R.id.highlight_text, text.ifBlank { "내용 없음" })
@@ -141,11 +149,14 @@ object NotificationHighlighter {
             setViewVisibility(R.id.highlight_summary, if (hasSummary) View.VISIBLE else View.GONE)
             setInt(R.id.highlight_root, "setBackgroundResource", backgroundFor(style))
         }
+
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setColor(0xFF4D7CFF.toInt())
-            .setCustomContentView(views)
-            .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$text"))
+            .setCustomContentView(collapsed)
+            .setCustomBigContentView(expanded)
+            // 요약문은 BigTextStyle 로도 넘겨 둔다(알림 UI가 커스텀 뷰를 안 그릴 때 대비).
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$appLabel · $title\n$text"))
             .setAutoCancel(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)

@@ -114,7 +114,10 @@ data class SettingsUiState(
     val aiCallsRemaining: Int = 0,
     val guardProfile: com.example.model.GuardProfile = com.example.model.GuardProfile.FAMILY,
     val guardStrength: com.example.model.GuardStrength = com.example.model.GuardStrength.NORMAL,
-    val guardPriority: com.example.model.GuardPriority = com.example.model.GuardPriority.MESSENGER
+    val guardPriority: com.example.model.GuardPriority = com.example.model.GuardPriority.MESSENGER,
+    /** (패키지명, 앱 이름, 사유). 사유 모아 보기 화면에서 쓴다. */
+    val lockReasonRows: List<Triple<String, String, String>> = emptyList(),
+    val staleReasonCount: Int = 0
 )
 
 /** 설정 화면에서 쓰는 색상 열거형 별칭(UI 층이 util 타입을 직접 다루지 않도록 한다). */
@@ -150,6 +153,8 @@ data class SettingsUiActions(
     val changeGuardProfile: (com.example.model.GuardProfile) -> Unit = {},
     val changeGuardStrength: (com.example.model.GuardStrength) -> Unit = {},
     val changeGuardPriority: (com.example.model.GuardPriority) -> Unit = {},
+    val openLockReasons: () -> Unit = {},
+    val updateLockReason: (String, String) -> Unit = { _, _ -> },
     val toggleAppSelfProtect: (Boolean) -> Unit = {},
     val toggleUninstallProtection: (Boolean) -> Unit = {},
     val toggleScreenOffLock: (Boolean) -> Unit = {},
